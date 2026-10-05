@@ -79,6 +79,7 @@
 
       <section class="view" id="mapView" aria-labelledby="mapTab">
         <div class="view-title"><p class="eyebrow">YOUR RANGE</p><h2>Squirrel map</h2></div>
+        <label class="feed-filter-label">Show<select class="feed-filter" id="mapFeedFilter"></select></label>
         <div class="map-card">
           <div id="map" aria-label="Map of squirrel sightings"></div>
           <div class="map-empty" id="mapEmpty"><span>📍</span><strong>No mapped squirrels yet</strong><p>Your next GPS-tagged sighting will appear here.</p></div>
@@ -88,6 +89,7 @@
 
       <section class="view" id="historyView" aria-labelledby="historyTab">
         <div class="view-title"><p class="eyebrow">THE TALLY</p><h2>All sightings</h2></div>
+        <label class="feed-filter-label">Show<select class="feed-filter" id="historyFeedFilter"></select></label>
         <div class="stats-grid">
           <div><strong id="totalCount">0</strong><span>Total</span></div>
           <div><strong id="speciesCount">0</strong><span>Types</span></div>
@@ -125,6 +127,13 @@
           <button type="button" class="secondary-button hidden" id="signOutButton">Sign out</button>
         </div>
         <button type="button" class="secondary-button account-import hidden" id="uploadLocalButton">Sync this device’s sightings</button>
+      </div>
+      <div class="settings-section hidden" id="friendsSection">
+        <h3>Friends</h3>
+        <div class="friend-add"><input id="friendEmail" type="email" placeholder="friend@example.com" autocomplete="email"><button type="button" class="secondary-button" id="sendFriendRequest">Add</button></div>
+        <small class="helper">They must sign in to Squirreling once before you can find them.</small>
+        <div class="friend-subsection hidden" id="requestsBlock"><strong>Requests</strong><div id="friendRequests"></div></div>
+        <div class="friend-subsection" id="friendsBlock"><strong>Your friends</strong><div id="friendsList"><small class="helper">No squirrel friends yet.</small></div></div>
       </div>
       <div class="settings-section">
         <h3>Backup</h3>

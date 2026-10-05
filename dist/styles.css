@@ -92,6 +92,8 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 29px; line-height: 1; le
 .map-note { margin: 13px 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .leaflet-control-attribution { font-size: 8px; }
 .stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 20px; }
+.feed-filter-label { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: -14px 0 13px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.feed-filter { min-width: 135px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
 .stats-grid div { padding: 15px 5px; background: var(--forest); color: white; border-radius: 16px; text-align: center; }
 .stats-grid strong, .stats-grid span { display: block; }
 .stats-grid strong { font-family: Georgia, serif; color: var(--lime); font-size: 27px; }
@@ -134,6 +136,13 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .account-copy strong, .account-copy small { display: block; }
 .account-copy small { margin-top: 3px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .account-import { width: 100%; margin-top: 8px; }
+.friend-add { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.friend-add input { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: #faf7ef; }
+.friend-subsection { margin-top: 14px; }
+.friend-subsection > strong { display: block; margin-bottom: 7px; font-size: 11px; }
+.friend-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); }
+.friend-row span { flex: 1; min-width: 0; font-size: 11px; overflow-wrap: anywhere; }
+.friend-row button { padding: 7px 9px; }
 .hidden { display: none !important; }
 .secondary-button { padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f4f0e5; font-size: 11px; font-weight: 800; cursor: pointer; }
 .save-button { width: 100%; margin-top: 20px; padding: 13px; border: 0; border-radius: 14px; background: var(--forest); color: white; font-weight: 800; cursor: pointer; }

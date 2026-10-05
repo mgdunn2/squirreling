@@ -35,6 +35,13 @@ let cloudDb = null;
 let currentUser = null;
 let unsubscribeCloud = null;
 let importTarget = 'local';
+let friends = [];
+let friendRequests = [];
+let friendSightings = [];
+let friendUnsubscribers = [];
+let unsubscribeFriends = null;
+let unsubscribeRequests = null;
+let feedFilter = 'mine';
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -53,6 +60,34 @@ function dateKey(value) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function speciesFor(id) { return settings.species.find(s => s.id === id) || { name: 'Squirrel', emoji: '🐿️' }; }
+function displaySpecies(item) { return item.speciesName ? { name:item.speciesName, emoji:item.speciesEmoji || '🐿️' } : speciesFor(item.speciesId); }
+
+function filteredFeedSightings() {
+  if (feedFilter === 'friends') return [...friendSightings].sort((a,b)=>b.timestamp-a.timestamp);
+  if (feedFilter.startsWith('friend:')) return friendSightings.filter(s => s.friendUid === feedFilter.slice(7)).sort((a,b)=>b.timestamp-a.timestamp);
+  if (feedFilter === 'all') return [...sightings, ...friendSightings].sort((a,b)=>b.timestamp-a.timestamp);
+  return sightings;
+}
+
+function renderFeedFilters() {
+  const options = [
+    ['mine','My sightings'],
+    ['friends','All friends'],
+    ...friends.map(f => [`friend:${f.uid}`, f.name || f.email || 'Friend']),
+    ['all','Me + friends']
+  ];
+  if (!options.some(([value]) => value === feedFilter)) feedFilter='mine';
+  const html=options.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===feedFilter?'selected':''}>${escapeHtml(label)}</option>`).join('');
+  $('mapFeedFilter').innerHTML=html;
+  $('historyFeedFilter').innerHTML=html;
+}
+
+function setFeedFilter(value) {
+  feedFilter=value;
+  renderFeedFilters();
+  renderHistory();
+  if ($('mapView').classList.contains('active')) renderMap();
+}
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -125,6 +160,9 @@ function bindEvents() {
   $('googleSignInButton').addEventListener('click', signInWithGoogle);
   $('signOutButton').addEventListener('click', () => firebaseAuth?.signOut());
   $('uploadLocalButton').addEventListener('click', uploadLocalSightings);
+  $('sendFriendRequest').addEventListener('click', sendFriendRequest);
+  $('mapFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
+  $('historyFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
 }
 
 function switchView(viewId) {
@@ -452,6 +490,7 @@ function renderAll() {
   renderHome();
   renderCalendar();
   renderHistory();
+  renderFeedFilters();
   if ($('mapView').classList.contains('active')) renderMap();
 }
 
@@ -505,14 +544,15 @@ function changeMonth(delta) {
 }
 
 function renderHistory() {
-  $('totalCount').textContent = sightings.length;
-  $('speciesCount').textContent = new Set(sightings.map(s=>s.speciesId)).size;
-  $('streakCount').textContent = calculateStreak();
-  renderList($('allSightings'), sightings, 'Your squirrel log is waiting for its first entry.', true);
+  const visible = filteredFeedSightings();
+  $('totalCount').textContent = visible.length;
+  $('speciesCount').textContent = new Set(visible.map(s=>s.speciesId)).size;
+  $('streakCount').textContent = calculateStreak(visible);
+  renderList($('allSightings'), visible, 'No sightings match this filter.', true);
 }
 
-function calculateStreak() {
-  const dates = new Set(sightings.map(s => dateKey(s.timestamp)));
+function calculateStreak(items=sightings) {
+  const dates = new Set(items.map(s => dateKey(s.timestamp)));
   let d = new Date(), streak = 0;
   if (!dates.has(dateKey(d))) d.setDate(d.getDate()-1);
   while (dates.has(dateKey(d))) { streak++; d.setDate(d.getDate()-1); }
@@ -522,10 +562,11 @@ function calculateStreak() {
 function renderList(container, items, empty, showDate=false) {
   if (!items.length) { container.innerHTML = `<div class="empty-state">${empty}</div>`; return; }
   container.innerHTML = items.map(s => {
-    const sp = speciesFor(s.speciesId);
-    return `<button class="sighting-row" data-id="${s.id}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:escapeHtml(sp.emoji)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
+    const sp = displaySpecies(s);
+    const owner = s.friendUid ? `${escapeHtml(s.ownerName || 'Friend')} · ` : '';
+    return `<button class="sighting-row" data-id="${s.id}" data-friend="${escapeHtml(s.friendUid || '')}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:escapeHtml(sp.emoji)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${owner}${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
   }).join('');
-  container.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => showDetail(b.dataset.id)));
+  container.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => b.dataset.friend ? showFriendDetail(b.dataset.id, b.dataset.friend) : showDetail(b.dataset.id)));
 }
 
 function showDetail(id) {
@@ -543,8 +584,16 @@ function showDetail(id) {
   };
 }
 
+function showFriendDetail(id, friendUid) {
+  const item = friendSightings.find(s => s.id === id && s.friendUid === friendUid); if (!item) return;
+  const sp = displaySpecies(item);
+  $('detailContent').innerHTML = `<div class="dialog-header"><div><p class="eyebrow">${escapeHtml((item.ownerName || 'FRIEND').toUpperCase())}</p><h2>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</h2></div><button class="close-button" id="closeFriendDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`:'No GPS coordinates'}<br>Photos remain private on their device.</p><button class="secondary-button" id="doneFriendDetail">Done</button>`;
+  $('detailDialog').showModal();
+  $('closeFriendDetail').onclick = $('doneFriendDetail').onclick = () => $('detailDialog').close();
+}
+
 function renderMap() {
-  const mapped = sightings.filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  const mapped = filteredFeedSightings().filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
   $('mapEmpty').classList.toggle('hidden', mapped.length > 0);
   if (!window.L) return;
   if (!map) {
@@ -554,8 +603,8 @@ function renderMap() {
   }
   markerLayer.clearLayers();
   mapped.forEach(s => {
-    const sp = speciesFor(s.speciesId);
-    L.marker([s.latitude,s.longitude]).bindPopup(`<strong>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</strong><br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
+    const sp = displaySpecies(s);
+    L.marker([s.latitude,s.longitude]).bindPopup(`<strong>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</strong>${s.friendUid?`<br>${escapeHtml(s.ownerName || 'Friend')}`:''}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
   });
   if (mapped.length === 1) map.setView([mapped[0].latitude,mapped[0].longitude], 15);
   if (mapped.length > 1) map.fitBounds(L.latLngBounds(mapped.map(s=>[s.latitude,s.longitude])), { padding:[28,28] });
@@ -633,6 +682,7 @@ function initFirebase() {
     firebaseAuth.onAuthStateChanged(async user => {
       currentUser = user;
       if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
+      stopSocialListeners();
       renderAccount();
       if (user) await startAccountSync(user);
     });
@@ -664,11 +714,13 @@ function renderAccount(message='') {
   $('signOutButton').classList.toggle('hidden', !signedIn);
   $('uploadLocalButton').classList.toggle('hidden', !signedIn);
   $('importAccountButton').classList.toggle('hidden', !signedIn);
+  $('friendsSection').classList.toggle('hidden', !signedIn);
 }
 
 function cloudSighting(item) {
   const { photo, ...record } = item;
-  return { ...record, ownerUid:currentUser.uid, updatedAt:item.updatedAt || Date.now() };
+  const sp = speciesFor(item.speciesId);
+  return { ...record, ownerUid:currentUser.uid, ownerName:currentUser.displayName || currentUser.email || 'Squirreler', speciesName:sp.name, speciesEmoji:sp.emoji, updatedAt:item.updatedAt || Date.now() };
 }
 
 async function syncSighting(item) {
@@ -726,9 +778,93 @@ async function startAccountSync(user) {
       }
       renderAccount('All account sightings synced.');
     }, () => renderAccount('Offline — account changes will sync later.'));
+    await startSocialSync(user);
   } catch {
     renderAccount('Offline — using sightings stored on this device.');
   }
+}
+
+async function emailHash(email) {
+  const normalized=email.trim().toLowerCase();
+  const bytes=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+  return [...new Uint8Array(bytes)].map(value=>value.toString(16).padStart(2,'0')).join('');
+}
+
+async function startSocialSync(user) {
+  const hash=await emailHash(user.email || '');
+  await cloudDb.collection('emailDirectory').doc(hash).set({ uid:user.uid, name:user.displayName || user.email, email:user.email, updatedAt:Date.now() });
+  unsubscribeRequests=cloudDb.collection('friendRequests').where('recipientUid','==',user.uid).onSnapshot(snapshot => {
+    friendRequests=snapshot.docs.map(doc=>({ id:doc.id, ...doc.data() })).filter(request=>request.status==='pending');
+    renderFriends();
+  });
+  unsubscribeFriends=cloudDb.collection('users').doc(user.uid).collection('friends').onSnapshot(snapshot => {
+    friends=snapshot.docs.map(doc=>({ uid:doc.id, ...doc.data() }));
+    startFriendSightingListeners();
+    renderFriends(); renderFeedFilters(); renderHistory();
+  });
+}
+
+function stopSocialListeners() {
+  if (unsubscribeFriends) unsubscribeFriends();
+  if (unsubscribeRequests) unsubscribeRequests();
+  friendUnsubscribers.forEach(unsubscribe=>unsubscribe());
+  unsubscribeFriends=unsubscribeRequests=null;
+  friendUnsubscribers=[]; friends=[]; friendRequests=[]; friendSightings=[];
+  renderFriends();
+}
+
+function startFriendSightingListeners() {
+  friendUnsubscribers.forEach(unsubscribe=>unsubscribe());
+  friendUnsubscribers=[]; friendSightings=[];
+  friends.forEach(friend => {
+    const unsubscribe=cloudDb.collection('users').doc(friend.uid).collection('sightings').onSnapshot(snapshot => {
+      friendSightings=friendSightings.filter(s=>s.friendUid!==friend.uid);
+      snapshot.docs.forEach(doc=>friendSightings.push({ ...doc.data(), id:doc.id, friendUid:friend.uid, ownerName:friend.name || friend.email || doc.data().ownerName || 'Friend', photo:null }));
+      renderHistory(); renderFeedFilters();
+      if ($('mapView').classList.contains('active')) renderMap();
+    });
+    friendUnsubscribers.push(unsubscribe);
+  });
+}
+
+async function sendFriendRequest() {
+  if (!currentUser) return;
+  const email=$('friendEmail').value.trim().toLowerCase();
+  if (!email) return;
+  if (email === currentUser.email?.toLowerCase()) { showToast('That’s your own account'); return; }
+  try {
+    const directory=await cloudDb.collection('emailDirectory').doc(await emailHash(email)).get();
+    if (!directory.exists) { showToast('They need to sign in to Squirreling first'); return; }
+    const recipient=directory.data();
+    const id=`${recipient.uid}_${currentUser.uid}`;
+    await cloudDb.collection('friendRequests').doc(id).set({ senderUid:currentUser.uid, senderName:currentUser.displayName || currentUser.email, senderEmail:currentUser.email, recipientUid:recipient.uid, recipientName:recipient.name || email, status:'pending', createdAt:Date.now() });
+    $('friendEmail').value=''; showToast('Friend request sent');
+  } catch { showToast('Couldn’t send that request'); }
+}
+
+async function acceptFriendRequest(id) {
+  const request=friendRequests.find(item=>item.id===id); if (!request || !currentUser) return;
+  try {
+    const batch=cloudDb.batch();
+    batch.update(cloudDb.collection('friendRequests').doc(id), { status:'accepted', respondedAt:Date.now() });
+    batch.set(cloudDb.collection('users').doc(currentUser.uid).collection('friends').doc(request.senderUid), { uid:request.senderUid, name:request.senderName, email:request.senderEmail, createdAt:Date.now() });
+    batch.set(cloudDb.collection('users').doc(request.senderUid).collection('friends').doc(currentUser.uid), { uid:currentUser.uid, name:currentUser.displayName || currentUser.email, email:currentUser.email, createdAt:Date.now() });
+    await batch.commit(); showToast('Friend added');
+  } catch { showToast('Couldn’t approve the request—check Firestore rules'); }
+}
+
+async function rejectFriendRequest(id) {
+  try { await cloudDb.collection('friendRequests').doc(id).update({ status:'rejected', respondedAt:Date.now() }); }
+  catch { showToast('Couldn’t decline the request'); }
+}
+
+function renderFriends() {
+  if (!$('friendsList')) return;
+  $('requestsBlock').classList.toggle('hidden', !friendRequests.length);
+  $('friendRequests').innerHTML=friendRequests.map(request=>`<div class="friend-row"><span><strong>${escapeHtml(request.senderName || request.senderEmail)}</strong><br>${escapeHtml(request.senderEmail || '')}</span><button class="secondary-button" data-accept="${escapeHtml(request.id)}">Accept</button><button class="secondary-button" data-reject="${escapeHtml(request.id)}">Decline</button></div>`).join('');
+  $('friendsList').innerHTML=friends.length?friends.map(friend=>`<div class="friend-row"><span><strong>${escapeHtml(friend.name || friend.email || 'Friend')}</strong><br>${escapeHtml(friend.email || '')}</span></div>`).join(''):'<small class="helper">No squirrel friends yet.</small>';
+  $('friendRequests').querySelectorAll('[data-accept]').forEach(button=>button.onclick=()=>acceptFriendRequest(button.dataset.accept));
+  $('friendRequests').querySelectorAll('[data-reject]').forEach(button=>button.onclick=()=>rejectFriendRequest(button.dataset.reject));
 }
 
 function queuedDeletes() {

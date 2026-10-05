@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function acceptedFriends(a, b) {
+      return (exists(/databases/$(database)/documents/friendRequests/$(a + '_' + b))
+          && getAfter(/databases/$(database)/documents/friendRequests/$(a + '_' + b)).data.status == 'accepted')
+        || (exists(/databases/$(database)/documents/friendRequests/$(b + '_' + a))
+          && getAfter(/databases/$(database)/documents/friendRequests/$(b + '_' + a)).data.status == 'accepted');
+    }
+
+    match /emailDirectory/{emailHash} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    match /friendRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if signedIn()
+        && (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid);
+      allow update: if signedIn()
+        && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.senderUid == resource.data.senderUid
+        && request.resource.data.recipientUid == resource.data.recipientUid
+        && request.resource.data.status in ['accepted', 'rejected'];
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+
+      match /settings/{documentId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /sightings/{sightingId} {
+        allow write: if signedIn() && request.auth.uid == userId;
+        allow read: if signedIn() && (request.auth.uid == userId
+          || exists(/databases/$(database)/documents/users/$(userId)/friends/$(request.auth.uid)));
+      }
+
+      match /friends/{friendId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create: if signedIn()
+          && (request.auth.uid == userId || request.auth.uid == friendId)
+          && acceptedFriends(userId, friendId);
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}
