@@ -40,6 +40,7 @@
 
         <div class="camera-row">
           <button class="camera-button" id="cameraButton"><span>📷</span> Photo sighting</button>
+          <button class="past-button" id="pastSightingButton"><span>◷</span> Add past sighting</button>
           <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
         </div>
 
@@ -135,6 +136,19 @@
       <label class="field-label">Name<input id="newSpeciesName" maxlength="32" placeholder="e.g. Prairie dog"></label>
       <label class="field-label">Emoji<input id="newSpeciesEmoji" maxlength="4" value="🐿️"></label>
       <button class="save-button" value="default" id="confirmSpeciesButton">Add squirrel</button>
+    </form>
+  </dialog>
+
+  <dialog id="pastSightingDialog">
+    <form method="dialog" class="dialog-card compact" id="pastSightingForm">
+      <div class="dialog-header"><div><p class="eyebrow">FIELD NOTES</p><h2>Add past sighting</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <p class="dialog-intro">Backdate a squirrel-family sighting and optionally attach a photo from your library.</p>
+      <label class="field-label">Squirrel type<select id="pastSpecies" required></select></label>
+      <label class="field-label">Date and time<input id="pastDateTime" type="datetime-local" required></label>
+      <label class="field-label">Photo <span class="optional">(optional)</span><input id="pastPhotoInput" type="file" accept="image/*"></label>
+      <div class="photo-preview hidden" id="pastPhotoPreview"></div>
+      <small class="helper">A past sighting won’t use your current GPS location.</small>
+      <button type="submit" class="save-button" id="savePastSightingButton">Save past sighting</button>
     </form>
   </dialog>
 

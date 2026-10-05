@@ -22,6 +22,7 @@ let markerLayer;
 let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = dateKey(new Date());
 let pendingPhoto = null;
+let pendingPastPhoto = null;
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -78,6 +79,9 @@ function bindEvents() {
   $('primarySpotButton').addEventListener('click', () => recordSighting(settings.primaryId));
   $('cameraButton').addEventListener('click', () => $('cameraInput').click());
   $('cameraInput').addEventListener('change', handlePhoto);
+  $('pastSightingButton').addEventListener('click', openPastSighting);
+  $('pastPhotoInput').addEventListener('change', handlePastPhoto);
+  $('pastSightingForm').addEventListener('submit', savePastSighting);
   $('settingsButton').addEventListener('click', openSettings);
   $('customizeButton').addEventListener('click', openSettings);
   $('addSpeciesButton').addEventListener('click', () => $('addSpeciesDialog').showModal());
@@ -123,6 +127,66 @@ async function recordSighting(speciesId, photo = null) {
       if (error.code === 1) showToast('Location wasn’t allowed—sighting still saved');
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
+}
+
+function localDateTimeValue(date = new Date()) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function openPastSighting() {
+  $('pastSpecies').innerHTML = settings.species.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.emoji)} ${escapeHtml(s.name)}</option>`).join('');
+  $('pastSpecies').value = settings.primaryId;
+  $('pastDateTime').value = localDateTimeValue();
+  $('pastDateTime').max = localDateTimeValue();
+  $('pastPhotoInput').value = '';
+  pendingPastPhoto = null;
+  $('pastPhotoPreview').classList.add('hidden');
+  $('pastPhotoPreview').innerHTML = '';
+  $('pastSightingDialog').showModal();
+}
+
+async function handlePastPhoto(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  showToast('Preparing photo…');
+  try {
+    pendingPastPhoto = await compressImage(file);
+    $('pastPhotoPreview').innerHTML = `<img src="${pendingPastPhoto}" alt="Selected sighting photo">`;
+    $('pastPhotoPreview').classList.remove('hidden');
+  } catch {
+    pendingPastPhoto = null;
+    event.target.value = '';
+    showToast('Couldn’t prepare that photo');
+  }
+}
+
+async function savePastSighting(event) {
+  event.preventDefault();
+  const timestamp = new Date($('pastDateTime').value).getTime();
+  if (!Number.isFinite(timestamp) || timestamp > Date.now() + 60000) {
+    showToast('Choose a valid time in the past');
+    return;
+  }
+  const item = {
+    id: crypto.randomUUID(),
+    speciesId: $('pastSpecies').value,
+    timestamp,
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    photo: pendingPastPhoto
+  };
+  await putSighting(item);
+  sightings.push(item);
+  sightings.sort((a,b) => b.timestamp - a.timestamp);
+  pendingPastPhoto = null;
+  $('pastSightingDialog').close();
+  currentMonth = new Date(new Date(timestamp).getFullYear(), new Date(timestamp).getMonth(), 1);
+  selectedDate = dateKey(timestamp);
+  renderAll();
+  const species = speciesFor(item.speciesId);
+  showToast(`${species.emoji} Past sighting added`);
 }
 
 async function handlePhoto(event) {
