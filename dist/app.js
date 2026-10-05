@@ -592,8 +592,36 @@ function showFriendDetail(id, friendUid) {
   $('closeFriendDetail').onclick = $('doneFriendDetail').onclick = () => $('detailDialog').close();
 }
 
+const MAP_PIN_COLORS = ['#276749','#d97706','#2563eb','#9333ea','#dc2626','#0891b2','#c026d3','#4d7c0f'];
+
+function mapPeople(items) {
+  const people = new Map();
+  items.forEach(item => {
+    const id = item.friendUid || currentUser?.uid || 'me';
+    if (!people.has(id)) people.set(id, item.friendUid ? (item.ownerName || 'Friend') : 'Me');
+  });
+  const ordered = [...people.entries()].sort(([a],[b]) => {
+    if (a === (currentUser?.uid || 'me')) return -1;
+    if (b === (currentUser?.uid || 'me')) return 1;
+    return a.localeCompare(b);
+  });
+  return new Map(ordered.map(([id,name], index) => [id, { name, color:MAP_PIN_COLORS[index % MAP_PIN_COLORS.length] }]));
+}
+
+function personPinIcon(color) {
+  return L.divIcon({
+    className:'person-map-pin',
+    html:`<span style="--pin-color:${color}"></span>`,
+    iconSize:[24,30],
+    iconAnchor:[12,28],
+    popupAnchor:[0,-27]
+  });
+}
+
 function renderMap() {
   const mapped = filteredFeedSightings().filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  const people = mapPeople(mapped);
+  $('mapLegend').innerHTML = [...people.values()].map(person => `<span class="map-legend-item"><i class="map-legend-dot" style="--pin-color:${person.color}"></i>${escapeHtml(person.name)}</span>`).join('');
   $('mapEmpty').classList.toggle('hidden', mapped.length > 0);
   if (!window.L) return;
   if (!map) {
@@ -604,7 +632,8 @@ function renderMap() {
   markerLayer.clearLayers();
   mapped.forEach(s => {
     const sp = displaySpecies(s);
-    L.marker([s.latitude,s.longitude]).bindPopup(`<strong>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</strong>${s.friendUid?`<br>${escapeHtml(s.ownerName || 'Friend')}`:''}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
+    const person = people.get(s.friendUid || currentUser?.uid || 'me');
+    L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</strong><br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
   });
   if (mapped.length === 1) map.setView([mapped[0].latitude,mapped[0].longitude], 15);
   if (mapped.length > 1) map.fitBounds(L.latLngBounds(mapped.map(s=>[s.latitude,s.longitude])), { padding:[28,28] });

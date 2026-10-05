@@ -94,6 +94,12 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 29px; line-height: 1; le
 .stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 20px; }
 .feed-filter-label { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: -14px 0 13px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .feed-filter { min-width: 135px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+.map-legend { display: flex; flex-wrap: wrap; gap: 7px 12px; margin: -3px 3px 12px; min-height: 20px; }
+.map-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.map-legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pin-color); box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(37,48,42,.16); }
+.person-map-pin { background: transparent; border: 0; }
+.person-map-pin span { position: relative; display: block; width: 24px; height: 24px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: var(--pin-color); box-shadow: 0 2px 6px rgba(24,37,29,.35); transform: rotate(-45deg); }
+.person-map-pin span::after { content: ''; position: absolute; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.9); top: 8px; left: 8px; }
 .stats-grid div { padding: 15px 5px; background: var(--forest); color: white; border-radius: 16px; text-align: center; }
 .stats-grid strong, .stats-grid span { display: block; }
 .stats-grid strong { font-family: Georgia, serif; color: var(--lime); font-size: 27px; }
