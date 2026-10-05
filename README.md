@@ -31,6 +31,7 @@ Browser security requires HTTPS or localhost for geolocation, service workers, a
 
 Open the hosted app in Safari, choose **Share → Add to Home Screen**, enable **Open as Web App**, and tap **Add**.
 
-## Hosted version
+## Hosted versions
 
-[Open Squirreling](https://squirreling-log.mgdunnvt.chatgpt.site)
+- [Public GitHub Pages app](https://mgdunn2.github.io/squirreling/)
+- [Private ChatGPT Sites app](https://squirreling-log.mgdunnvt.chatgpt.site)
