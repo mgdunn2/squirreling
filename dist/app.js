@@ -38,6 +38,7 @@ let sightings = [];
 let db;
 let map;
 let markerLayer;
+let mapScope = 'recent';
 let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = dateKey(new Date());
 let pendingPhoto = null;
@@ -152,6 +153,7 @@ function renderFeedFilters() {
 
 function setFeedFilter(value) {
   feedFilter=value;
+  mapScope='recent';
   renderFeedFilters();
   renderHistory();
   if ($('mapView').classList.contains('active')) renderMap();
@@ -241,6 +243,10 @@ function bindEvents() {
   $('signOutButton').addEventListener('click', () => firebaseAuth?.signOut());
   $('uploadLocalButton').addEventListener('click', uploadLocalSightings);
   $('sendFriendRequest').addEventListener('click', sendFriendRequest);
+  $('mapScopeButton').addEventListener('click', () => {
+    mapScope = mapScope === 'recent' ? 'all' : 'recent';
+    renderMap();
+  });
   $('mapFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
   $('historyFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
 }
@@ -248,7 +254,10 @@ function bindEvents() {
 function switchView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === viewId));
   document.querySelectorAll('.nav-item').forEach(v => v.classList.toggle('active', v.dataset.view === viewId));
-  if (viewId === 'mapView') setTimeout(renderMap, 80);
+  if (viewId === 'mapView') {
+    mapScope = 'recent';
+    setTimeout(renderMap, 80);
+  }
   if (viewId === 'calendarView') renderCalendar();
   if (viewId === 'historyView') renderHistory();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -725,7 +734,14 @@ function personPinIcon(color) {
 
 function renderMap() {
   const mapped = filteredFeedSightings().filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  const newestTimestamp = mapped.reduce((newest, sighting) => Math.max(newest, Number(sighting.timestamp) || 0), 0);
+  const recentCutoff = newestTimestamp - (7 * 24 * 60 * 60 * 1000);
+  const recent = mapped.filter(sighting => (Number(sighting.timestamp) || 0) >= recentCutoff);
+  const focusSightings = mapScope === 'all' ? mapped : recent;
+  const hasOlderSightings = recent.length < mapped.length;
   const people = mapPeople(mapped);
+  $('mapScopeButton').textContent = mapScope === 'all' ? 'Show recent week' : 'Show all sightings';
+  $('mapScopeButton').hidden = !hasOlderSightings;
   $('mapLegend').innerHTML = [...people.values()].map(person => `<span class="map-legend-item"><i class="map-legend-dot" style="--pin-color:${person.color}"></i>${escapeHtml(person.name)}</span>`).join('');
   $('mapEmpty').classList.toggle('hidden', mapped.length > 0);
   if (!window.L) return;
@@ -740,8 +756,8 @@ function renderMap() {
     const person = people.get(s.friendUid || currentUser?.uid || 'me');
     L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.name)}</strong>${sp.scientific?`<br><em>${escapeHtml(sp.scientific)}</em>`:''}<br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
   });
-  if (mapped.length === 1) map.setView([mapped[0].latitude,mapped[0].longitude], 15);
-  if (mapped.length > 1) map.fitBounds(L.latLngBounds(mapped.map(s=>[s.latitude,s.longitude])), { padding:[28,28] });
+  if (focusSightings.length === 1) map.setView([focusSightings[0].latitude,focusSightings[0].longitude], 15);
+  if (focusSightings.length > 1) map.fitBounds(L.latLngBounds(focusSightings.map(s=>[s.latitude,s.longitude])), { padding:[28,28], maxZoom:15 });
   map.invalidateSize();
 }
 

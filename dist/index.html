@@ -79,7 +79,10 @@
 
       <section class="view" id="mapView" aria-labelledby="mapTab">
         <div class="view-title"><p class="eyebrow">YOUR RANGE</p><h2>Squirrel map</h2></div>
-        <label class="feed-filter-label">Show<select class="feed-filter" id="mapFeedFilter"></select></label>
+        <div class="map-controls">
+          <label class="feed-filter-label">Show<select class="feed-filter" id="mapFeedFilter"></select></label>
+          <button class="secondary-button map-scope-button" id="mapScopeButton" type="button" hidden>Show all sightings</button>
+        </div>
         <div class="map-legend" id="mapLegend" aria-label="Map pin colors"></div>
         <div class="map-card">
           <div id="map" aria-label="Map of squirrel sightings"></div>
