@@ -1,4 +1,4 @@
-const CACHE = 'squirreling-shell-v11';
+const CACHE = 'squirreling-shell-v12';
 const IMAGE_CACHE = 'squirreling-taxa-v2';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './firebase-config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())));
@@ -16,8 +16,13 @@ self.addEventListener('fetch', event => {
     }));
     return;
   }
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (new URL(event.request.url).origin === location.origin) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
+  if (url.origin !== location.origin) return;
+  event.respondWith(fetch(event.request).then(response => {
+    caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
     return response;
-  }).catch(() => event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())));
+  }).catch(async () => {
+    const cached = await caches.match(event.request);
+    if (cached) return cached;
+    return event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error();
+  }));
 });

@@ -9,9 +9,11 @@ const TAXA = [
   { id:'eastern-gray-melanistic', taxonId:'sciurus-carolinensis', name:'Black eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', traits:['melanistic'], image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg/960px-Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg' },
   { id:'fox-squirrel', taxonId:'sciurus-niger', name:'Fox squirrel', scientific:'Sciurus niger', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg/960px-Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg' },
   { id:'american-red', taxonId:'tamiasciurus-hudsonicus', name:'American red squirrel', scientific:'Tamiasciurus hudsonicus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Tamiasciurus_hudsonicus.jpg/960px-Tamiasciurus_hudsonicus.jpg' },
+  { id:'townsends-chipmunk', taxonId:'neotamias-townsendii', name:'Townsend’s chipmunk', scientific:'Neotamias townsendii', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Neotamias_townsendii.jpg/960px-Neotamias_townsendii.jpg' },
   { id:'eastern-chipmunk', taxonId:'tamias-striatus', name:'Eastern chipmunk', scientific:'Tamias striatus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
   { id:'chipmunk-unspecified', taxonId:'chipmunks', name:'Chipmunk — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
   { id:'groundhog', taxonId:'marmota-monax', name:'Groundhog', scientific:'Marmota monax', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
+  { id:'hoary-marmot', taxonId:'marmota-caligata', name:'Hoary marmot', scientific:'Marmota caligata', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/Hoary_marmot_%28Marmota_caligata_cascadensis%29_Whistler_2.jpg/960px-Hoary_marmot_%28Marmota_caligata_cascadensis%29_Whistler_2.jpg' },
   { id:'marmot-unspecified', taxonId:'marmota', name:'Marmot — species unknown', scientific:'Marmota', rank:'genus', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
   { id:'southern-flying', taxonId:'glaucomys-volans', name:'Southern flying squirrel', scientific:'Glaucomys volans', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
   { id:'flying-unspecified', taxonId:'glaucomys', name:'Flying squirrel — species unknown', scientific:'Glaucomys', rank:'genus', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
@@ -212,7 +214,15 @@ async function init() {
   bindEvents();
   renderAll();
   initFirebase();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    let refreshing=false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing=true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(registration => registration.update()).catch(() => {});
+  }
 }
 
 function bindEvents() {
