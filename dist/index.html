@@ -148,6 +148,7 @@
       <label class="field-label">Photo <span class="optional">(optional)</span><input id="pastPhotoInput" type="file" accept="image/*"></label>
       <div class="photo-preview hidden" id="pastPhotoPreview"></div>
       <div class="metadata-status hidden" id="pastMetadataStatus" role="status"></div>
+      <div class="location-choice"><button type="button" class="secondary-button" id="choosePastLocationButton">📍 Choose location on map</button><span id="pastLocationSummary">No location selected</span></div>
       <small class="helper">A past sighting won’t use your current GPS location.</small>
       <button type="submit" class="save-button" id="savePastSightingButton">Save past sighting</button>
     </form>
@@ -155,6 +156,16 @@
 
   <dialog id="detailDialog">
     <div class="dialog-card compact" id="detailContent"></div>
+  </dialog>
+
+  <dialog id="locationPickerDialog">
+    <div class="dialog-card compact">
+      <div class="dialog-header"><div><p class="eyebrow">DROP A PIN</p><h2>Choose location</h2></div><button type="button" class="close-button" id="cancelLocationPicker" aria-label="Close">×</button></div>
+      <p class="dialog-intro">Pan and zoom, then tap the map where you saw it.</p>
+      <div id="locationPickerMap" aria-label="Choose a sighting location on the map"></div>
+      <p class="picked-coordinates" id="pickedCoordinates">Tap the map to place a pin.</p>
+      <button type="button" class="save-button" id="savePickedLocation" disabled>Save location</button>
+    </div>
   </dialog>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>

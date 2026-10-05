@@ -24,6 +24,11 @@ let selectedDate = dateKey(new Date());
 let pendingPhoto = null;
 let pendingPastPhoto = null;
 let pendingPastMetadata = null;
+let pendingPastLocation = null;
+let locationPickerMap = null;
+let locationPickerMarker = null;
+let locationPickerSelection = null;
+let locationPickerTarget = null;
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -83,6 +88,9 @@ function bindEvents() {
   $('pastSightingButton').addEventListener('click', openPastSighting);
   $('pastPhotoInput').addEventListener('change', handlePastPhoto);
   $('pastSightingForm').addEventListener('submit', savePastSighting);
+  $('choosePastLocationButton').addEventListener('click', () => openLocationPicker('past'));
+  $('cancelLocationPicker').addEventListener('click', cancelLocationPicker);
+  $('savePickedLocation').addEventListener('click', savePickedLocation);
   $('settingsButton').addEventListener('click', openSettings);
   $('customizeButton').addEventListener('click', openSettings);
   $('addSpeciesButton').addEventListener('click', () => $('addSpeciesDialog').showModal());
@@ -143,10 +151,12 @@ function openPastSighting() {
   $('pastPhotoInput').value = '';
   pendingPastPhoto = null;
   pendingPastMetadata = null;
+  pendingPastLocation = null;
   $('pastPhotoPreview').classList.add('hidden');
   $('pastPhotoPreview').innerHTML = '';
   $('pastMetadataStatus').classList.add('hidden');
   $('pastMetadataStatus').textContent = '';
+  updatePastLocationSummary();
   $('pastSightingDialog').showModal();
 }
 
@@ -161,7 +171,11 @@ async function handlePastPhoto(event) {
     $('pastPhotoPreview').innerHTML = `<img src="${pendingPastPhoto}" alt="Selected sighting photo">`;
     $('pastPhotoPreview').classList.remove('hidden');
     const found = [];
-    if (Number.isFinite(metadata.latitude) && Number.isFinite(metadata.longitude)) found.push('photo location');
+    if (Number.isFinite(metadata.latitude) && Number.isFinite(metadata.longitude)) {
+      pendingPastLocation = { latitude: metadata.latitude, longitude: metadata.longitude };
+      found.push('photo location');
+      updatePastLocationSummary();
+    }
     if (metadata.capturedAt && metadata.capturedAt.getTime() <= Date.now()) {
       $('pastDateTime').value = localDateTimeValue(metadata.capturedAt);
       found.push('capture time');
@@ -187,8 +201,8 @@ async function savePastSighting(event) {
     id: crypto.randomUUID(),
     speciesId: $('pastSpecies').value,
     timestamp,
-    latitude: Number.isFinite(pendingPastMetadata?.latitude) ? pendingPastMetadata.latitude : null,
-    longitude: Number.isFinite(pendingPastMetadata?.longitude) ? pendingPastMetadata.longitude : null,
+    latitude: Number.isFinite(pendingPastLocation?.latitude) ? pendingPastLocation.latitude : null,
+    longitude: Number.isFinite(pendingPastLocation?.longitude) ? pendingPastLocation.longitude : null,
     accuracy: null,
     photo: pendingPastPhoto
   };
@@ -197,12 +211,87 @@ async function savePastSighting(event) {
   sightings.sort((a,b) => b.timestamp - a.timestamp);
   pendingPastPhoto = null;
   pendingPastMetadata = null;
+  pendingPastLocation = null;
   $('pastSightingDialog').close();
   currentMonth = new Date(new Date(timestamp).getFullYear(), new Date(timestamp).getMonth(), 1);
   selectedDate = dateKey(timestamp);
   renderAll();
   const species = speciesFor(item.speciesId);
   showToast(`${species.emoji} Past sighting added`);
+}
+
+function updatePastLocationSummary() {
+  $('pastLocationSummary').textContent = pendingPastLocation
+    ? `${pendingPastLocation.latitude.toFixed(5)}, ${pendingPastLocation.longitude.toFixed(5)}`
+    : 'No location selected';
+}
+
+function openLocationPicker(target) {
+  locationPickerTarget = target;
+  const targetItem = target === 'past' ? null : sightings.find(item => item.id === target);
+  locationPickerSelection = target === 'past'
+    ? pendingPastLocation
+    : (Number.isFinite(targetItem?.latitude) ? { latitude:targetItem.latitude, longitude:targetItem.longitude } : null);
+  if ($('pastSightingDialog').open) $('pastSightingDialog').close();
+  if ($('detailDialog').open) $('detailDialog').close();
+  $('locationPickerDialog').showModal();
+  setTimeout(() => {
+    const mapped = sightings.find(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+    const center = locationPickerSelection || (mapped ? { latitude:mapped.latitude, longitude:mapped.longitude } : { latitude:38.88, longitude:-77.1 });
+    if (!locationPickerMap) {
+      locationPickerMap = L.map('locationPickerMap').setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap contributors' }).addTo(locationPickerMap);
+      locationPickerMap.on('click', event => setPickerSelection(event.latlng.lat, event.latlng.lng));
+    } else {
+      locationPickerMap.setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
+    }
+    if (locationPickerSelection) setPickerSelection(locationPickerSelection.latitude, locationPickerSelection.longitude, false);
+    else {
+      if (locationPickerMarker) { locationPickerMap.removeLayer(locationPickerMarker); locationPickerMarker=null; }
+      $('pickedCoordinates').textContent = 'Tap the map to place a pin.';
+      $('savePickedLocation').disabled = true;
+    }
+    locationPickerMap.invalidateSize();
+  }, 80);
+}
+
+function setPickerSelection(latitude, longitude, pan=true) {
+  locationPickerSelection = { latitude, longitude };
+  if (locationPickerMarker) locationPickerMarker.setLatLng([latitude, longitude]);
+  else locationPickerMarker = L.marker([latitude, longitude]).addTo(locationPickerMap);
+  if (pan) locationPickerMap.panTo([latitude, longitude]);
+  $('pickedCoordinates').textContent = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  $('savePickedLocation').disabled = false;
+}
+
+function cancelLocationPicker() {
+  const target = locationPickerTarget;
+  $('locationPickerDialog').close();
+  if (target === 'past') $('pastSightingDialog').showModal();
+  else if (target) showDetail(target);
+}
+
+async function savePickedLocation() {
+  if (!locationPickerSelection) return;
+  const target = locationPickerTarget;
+  if (target === 'past') {
+    pendingPastLocation = { ...locationPickerSelection };
+    updatePastLocationSummary();
+    $('locationPickerDialog').close();
+    $('pastSightingDialog').showModal();
+    showToast('📍 Location selected');
+    return;
+  }
+  const item = sightings.find(s => s.id === target);
+  if (!item) return;
+  item.latitude = locationPickerSelection.latitude;
+  item.longitude = locationPickerSelection.longitude;
+  item.accuracy = null;
+  await putSighting(item);
+  $('locationPickerDialog').close();
+  renderAll();
+  showDetail(item.id);
+  showToast('📍 Location added');
 }
 
 async function readExifMetadata(file) {
@@ -415,9 +504,10 @@ function renderList(container, items, empty, showDate=false) {
 function showDetail(id) {
   const item = sightings.find(s => s.id === id); if (!item) return;
   const sp = speciesFor(item.speciesId);
-  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:''}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</h2></div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${item.latitude?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)} · ±${item.accuracy || '?'}m`:'No GPS coordinates'}</p><div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
+  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:''}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</h2></div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}${item.accuracy?` · ±${item.accuracy}m`:''}`:'No GPS coordinates'}</p>${Number.isFinite(item.latitude)?'':`<button class="secondary-button add-location-button" id="addLocationToSighting">📍 Choose location on map</button>`}<div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
   $('detailDialog').showModal();
   $('closeDetail').onclick = $('closeDetail2').onclick = () => $('detailDialog').close();
+  if ($('addLocationToSighting')) $('addLocationToSighting').onclick = () => openLocationPicker(item.id);
   $('deleteSighting').onclick = async () => {
     if (!confirm('Delete this squirrel sighting?')) return;
     await removeSighting(item.id);

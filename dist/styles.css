@@ -139,9 +139,15 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
 .metadata-status { margin: 0 0 10px; padding: 10px 12px; border-radius: 11px; background: #eef4df; color: var(--forest); font-size: 11px; font-weight: 800; }
 .metadata-status.hidden { display: none; }
+.location-choice { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.location-choice button { flex: 0 0 auto; }
+.location-choice span { color: var(--muted); font-size: 10px; line-height: 1.35; }
+#locationPickerMap { height: min(48vh, 380px); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: #e7eadb; }
+.picked-coordinates { margin: 10px 2px 0; color: var(--muted); font-size: 11px; text-align: center; }
 .detail-photo { width: 100%; max-height: 350px; object-fit: cover; border-radius: 17px; margin-bottom: 14px; }
 .detail-meta { color: var(--muted); font-size: 12px; line-height: 1.65; }
 .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.add-location-button { width: 100%; margin: 0 0 12px; }
 .danger-button { padding: 11px; border: 1px solid #d8a594; border-radius: 12px; background: #fff2ed; color: #953a1b; font-size: 11px; font-weight: 800; cursor: pointer; }
 @media (min-width: 621px) { body { padding: 20px 0; } .app-shell { min-height: calc(100dvh - 40px); border-radius: 28px; box-shadow: var(--shadow); } .bottom-nav { bottom: 20px; border-radius: 0 0 28px 28px; } }
 @media (max-height: 700px) { .spot-button { width: min(54vw, 230px); } .spot-emoji { font-size: 58px; } .spot-button strong { font-size: 18px; } }
