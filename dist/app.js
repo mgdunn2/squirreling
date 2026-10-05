@@ -23,6 +23,7 @@ let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = dateKey(new Date());
 let pendingPhoto = null;
 let pendingPastPhoto = null;
+let pendingPastMetadata = null;
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -141,8 +142,11 @@ function openPastSighting() {
   $('pastDateTime').max = localDateTimeValue();
   $('pastPhotoInput').value = '';
   pendingPastPhoto = null;
+  pendingPastMetadata = null;
   $('pastPhotoPreview').classList.add('hidden');
   $('pastPhotoPreview').innerHTML = '';
+  $('pastMetadataStatus').classList.add('hidden');
+  $('pastMetadataStatus').textContent = '';
   $('pastSightingDialog').showModal();
 }
 
@@ -151,11 +155,22 @@ async function handlePastPhoto(event) {
   if (!file) return;
   showToast('Preparing photo…');
   try {
-    pendingPastPhoto = await compressImage(file);
+    const [photo, metadata] = await Promise.all([compressImage(file), readExifMetadata(file)]);
+    pendingPastPhoto = photo;
+    pendingPastMetadata = metadata;
     $('pastPhotoPreview').innerHTML = `<img src="${pendingPastPhoto}" alt="Selected sighting photo">`;
     $('pastPhotoPreview').classList.remove('hidden');
+    const found = [];
+    if (Number.isFinite(metadata.latitude) && Number.isFinite(metadata.longitude)) found.push('photo location');
+    if (metadata.capturedAt && metadata.capturedAt.getTime() <= Date.now()) {
+      $('pastDateTime').value = localDateTimeValue(metadata.capturedAt);
+      found.push('capture time');
+    }
+    $('pastMetadataStatus').textContent = found.length ? `✓ Found ${found.join(' and ')} in the photo` : 'No location or capture time found in this photo';
+    $('pastMetadataStatus').classList.remove('hidden');
   } catch {
     pendingPastPhoto = null;
+    pendingPastMetadata = null;
     event.target.value = '';
     showToast('Couldn’t prepare that photo');
   }
@@ -172,8 +187,8 @@ async function savePastSighting(event) {
     id: crypto.randomUUID(),
     speciesId: $('pastSpecies').value,
     timestamp,
-    latitude: null,
-    longitude: null,
+    latitude: Number.isFinite(pendingPastMetadata?.latitude) ? pendingPastMetadata.latitude : null,
+    longitude: Number.isFinite(pendingPastMetadata?.longitude) ? pendingPastMetadata.longitude : null,
     accuracy: null,
     photo: pendingPastPhoto
   };
@@ -181,12 +196,109 @@ async function savePastSighting(event) {
   sightings.push(item);
   sightings.sort((a,b) => b.timestamp - a.timestamp);
   pendingPastPhoto = null;
+  pendingPastMetadata = null;
   $('pastSightingDialog').close();
   currentMonth = new Date(new Date(timestamp).getFullYear(), new Date(timestamp).getMonth(), 1);
   selectedDate = dateKey(timestamp);
   renderAll();
   const species = speciesFor(item.speciesId);
   showToast(`${species.emoji} Past sighting added`);
+}
+
+async function readExifMetadata(file) {
+  const empty = { latitude: null, longitude: null, capturedAt: null };
+  try {
+    const view = new DataView(await file.arrayBuffer());
+    if (view.byteLength < 4 || view.getUint16(0, false) !== 0xffd8) return empty;
+    let offset = 2;
+    while (offset + 4 <= view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) break;
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xda || marker === 0xd9) break;
+      const length = view.getUint16(offset + 2, false);
+      if (length < 2 || offset + 2 + length > view.byteLength) break;
+      if (marker === 0xe1 && length >= 8 && ascii(view, offset + 4, 6) === 'Exif\0\0') {
+        return parseExifTiff(view, offset + 10, length - 8);
+      }
+      offset += 2 + length;
+    }
+  } catch {}
+  return empty;
+}
+
+function parseExifTiff(view, base, available) {
+  const empty = { latitude: null, longitude: null, capturedAt: null };
+  if (available < 8 || base + available > view.byteLength) return empty;
+  const byteOrder = view.getUint16(base, false);
+  const little = byteOrder === 0x4949;
+  if (!little && byteOrder !== 0x4d4d) return empty;
+  const u16 = at => view.getUint16(base + at, little);
+  const u32 = at => view.getUint32(base + at, little);
+  const inRange = (at, size=1) => at >= 0 && at + size <= available;
+  if (!inRange(4, 4) || u16(2) !== 42) return empty;
+
+  const readIfd = at => {
+    const tags = new Map();
+    if (!inRange(at, 2)) return tags;
+    const count = u16(at);
+    for (let i=0; i<count; i++) {
+      const entry = at + 2 + i * 12;
+      if (!inRange(entry, 12)) break;
+      tags.set(u16(entry), { type:u16(entry+2), count:u32(entry+4), valueAt:entry+8, pointer:u32(entry+8) });
+    }
+    return tags;
+  };
+  const bytesPerType = type => ({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8}[type] || 0);
+  const dataAt = tag => {
+    const size = bytesPerType(tag.type) * tag.count;
+    const at = size <= 4 ? tag.valueAt : tag.pointer;
+    return inRange(at, size) ? at : null;
+  };
+  const text = tag => {
+    if (!tag || tag.type !== 2) return null;
+    const at = dataAt(tag); if (at === null) return null;
+    return ascii(view, base + at, tag.count).replace(/\0.*$/, '').trim();
+  };
+  const rational = (tag, index) => {
+    const at = dataAt(tag); if (at === null || tag.type !== 5 || index >= tag.count) return NaN;
+    const numerator = u32(at + index*8), denominator = u32(at + index*8 + 4);
+    return denominator ? numerator / denominator : NaN;
+  };
+  const firstIfd = u32(4);
+  const root = readIfd(firstIfd);
+  let capturedAt = null;
+  const exifPointer = root.get(0x8769)?.pointer;
+  const exif = Number.isFinite(exifPointer) ? readIfd(exifPointer) : new Map();
+  const dateString = text(exif.get(0x9003)) || text(exif.get(0x9004)) || text(root.get(0x0132));
+  const match = dateString?.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (match) {
+    const parts = match.slice(1).map(Number);
+    const candidate = new Date(parts[0], parts[1]-1, parts[2], parts[3], parts[4], parts[5]);
+    if (!Number.isNaN(candidate.getTime())) capturedAt = candidate;
+  }
+
+  let latitude = null, longitude = null;
+  const gpsPointer = root.get(0x8825)?.pointer;
+  if (Number.isFinite(gpsPointer)) {
+    const gps = readIfd(gpsPointer);
+    const latTag = gps.get(0x0002), lonTag = gps.get(0x0004);
+    if (latTag && lonTag) {
+      const lat = rational(latTag,0) + rational(latTag,1)/60 + rational(latTag,2)/3600;
+      const lon = rational(lonTag,0) + rational(lonTag,1)/60 + rational(lonTag,2)/3600;
+      const latRef = text(gps.get(0x0001)), lonRef = text(gps.get(0x0003));
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        latitude = latRef === 'S' ? -lat : lat;
+        longitude = lonRef === 'W' ? -lon : lon;
+      }
+    }
+  }
+  return { latitude, longitude, capturedAt };
+}
+
+function ascii(view, start, count) {
+  let value = '';
+  for (let i=0; i<count && start+i<view.byteLength; i++) value += String.fromCharCode(view.getUint8(start+i));
+  return value;
 }
 
 async function handlePhoto(event) {
