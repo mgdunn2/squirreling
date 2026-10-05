@@ -1,6 +1,7 @@
 const DB_NAME = 'squirreling-db';
 const DB_VERSION = 1;
 const SETTINGS_KEY = 'squirreling-settings-v1';
+const PENDING_DELETES_KEY = 'squirreling-pending-deletes-v1';
 
 const defaultSettings = {
   gps: true,
@@ -29,6 +30,11 @@ let locationPickerMap = null;
 let locationPickerMarker = null;
 let locationPickerSelection = null;
 let locationPickerTarget = null;
+let firebaseAuth = null;
+let cloudDb = null;
+let currentUser = null;
+let unsubscribeCloud = null;
+let importTarget = 'local';
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -69,14 +75,27 @@ function dbRequest(mode, action) {
   });
 }
 async function readAll() { return dbRequest('readonly', store => store.getAll()); }
-async function putSighting(item) { await dbRequest('readwrite', store => store.put(item)); }
-async function removeSighting(id) { await dbRequest('readwrite', store => store.delete(id)); }
+async function putSighting(item, sync=true) {
+  await dbRequest('readwrite', store => store.put(item));
+  if (sync && currentUser && item.ownerUid === currentUser.uid) syncSighting(item).catch(() => renderAccount('Sync waiting for connection'));
+}
+async function removeSighting(id, sync=true) {
+  const item = sightings.find(s => s.id === id);
+  await dbRequest('readwrite', store => store.delete(id));
+  if (sync && currentUser && item?.ownerUid === currentUser.uid) {
+    queueDelete(currentUser.uid, id);
+    cloudDb.collection('users').doc(currentUser.uid).collection('sightings').doc(id).delete()
+      .then(() => clearQueuedDelete(currentUser.uid, id))
+      .catch(() => renderAccount('Deletion waiting to sync'));
+  }
+}
 
 async function init() {
   db = await openDb();
   sightings = (await readAll()).sort((a,b) => b.timestamp - a.timestamp);
   bindEvents();
   renderAll();
+  initFirebase();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
@@ -100,8 +119,12 @@ function bindEvents() {
   $('prevMonth').addEventListener('click', () => changeMonth(-1));
   $('nextMonth').addEventListener('click', () => changeMonth(1));
   $('exportButton').addEventListener('click', exportData);
-  $('importButton').addEventListener('click', () => $('importInput').click());
+  $('importButton').addEventListener('click', () => { importTarget='local'; $('importInput').click(); });
+  $('importAccountButton').addEventListener('click', () => { importTarget='account'; $('importInput').click(); });
   $('importInput').addEventListener('change', importData);
+  $('googleSignInButton').addEventListener('click', signInWithGoogle);
+  $('signOutButton').addEventListener('click', () => firebaseAuth?.signOut());
+  $('uploadLocalButton').addEventListener('click', uploadLocalSightings);
 }
 
 function switchView(viewId) {
@@ -115,7 +138,7 @@ function switchView(viewId) {
 
 async function recordSighting(speciesId, photo = null) {
   const now = Date.now();
-  const item = { id: crypto.randomUUID(), speciesId, timestamp: now, latitude: null, longitude: null, accuracy: null, photo };
+  const item = { id: crypto.randomUUID(), speciesId, timestamp: now, latitude: null, longitude: null, accuracy: null, photo, ownerUid:currentUser?.uid || null, updatedAt:now };
   await putSighting(item);
   sightings.unshift(item);
   renderAll();
@@ -129,6 +152,7 @@ async function recordSighting(speciesId, photo = null) {
       item.latitude = pos.coords.latitude;
       item.longitude = pos.coords.longitude;
       item.accuracy = Math.round(pos.coords.accuracy);
+      item.updatedAt = Date.now();
       await putSighting(item);
       renderAll();
       showToast('📍 Location added');
@@ -204,7 +228,9 @@ async function savePastSighting(event) {
     latitude: Number.isFinite(pendingPastLocation?.latitude) ? pendingPastLocation.latitude : null,
     longitude: Number.isFinite(pendingPastLocation?.longitude) ? pendingPastLocation.longitude : null,
     accuracy: null,
-    photo: pendingPastPhoto
+    photo: pendingPastPhoto,
+    ownerUid: currentUser?.uid || null,
+    updatedAt: Date.now()
   };
   await putSighting(item);
   sightings.push(item);
@@ -287,6 +313,7 @@ async function savePickedLocation() {
   item.latitude = locationPickerSelection.latitude;
   item.longitude = locationPickerSelection.longitude;
   item.accuracy = null;
+  item.updatedAt = Date.now();
   await putSighting(item);
   $('locationPickerDialog').close();
   renderAll();
@@ -563,7 +590,9 @@ function addSpecies(event) {
 
 function commitSettings() {
   settings.gps = $('gpsToggle').checked;
-  saveSettings(); renderAll(); showToast('Squirrel setup saved');
+  saveSettings();
+  if (currentUser) syncSettings().catch(() => renderAccount('Settings waiting to sync'));
+  renderAll(); showToast('Squirrel setup saved');
 }
 
 async function exportData() {
@@ -578,13 +607,166 @@ async function importData(event) {
   try {
     const data=JSON.parse(await file.text());
     if (!Array.isArray(data.sightings) || !data.settings?.species) throw new Error();
-    if (!confirm(`Import ${data.sightings.length} sightings? Existing sightings with different IDs will be kept.`)) return;
+    const intoAccount = importTarget === 'account' && currentUser;
+    if (!confirm(`Import ${data.sightings.length} sightings ${intoAccount?'into your account':'on this device only'}? Existing sightings with different IDs will be kept.`)) return;
     settings=data.settings; saveSettings();
-    for (const item of data.sightings) await putSighting(item);
+    for (const original of data.sightings) {
+      const item = { ...original, ownerUid:intoAccount?currentUser.uid:null, updatedAt:Date.now() };
+      await putSighting(item, Boolean(intoAccount));
+    }
+    if (intoAccount) await syncSettings();
     sightings=(await readAll()).sort((a,b)=>b.timestamp-a.timestamp);
     renderAll(); renderSpeciesEditor(); showToast('Backup imported');
   } catch { showToast('That backup file isn’t valid'); }
   event.target.value='';
+}
+
+function initFirebase() {
+  if (!window.firebase || !window.SQUIRRELING_FIREBASE_CONFIG) {
+    renderAccount('Cloud sync is unavailable; local mode still works.');
+    return;
+  }
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(window.SQUIRRELING_FIREBASE_CONFIG);
+    firebaseAuth = firebase.auth();
+    cloudDb = firebase.firestore();
+    firebaseAuth.onAuthStateChanged(async user => {
+      currentUser = user;
+      if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
+      renderAccount();
+      if (user) await startAccountSync(user);
+    });
+  } catch {
+    renderAccount('Cloud sync could not start; local mode still works.');
+  }
+}
+
+async function signInWithGoogle() {
+  if (!firebaseAuth) { showToast('Cloud sync is unavailable'); return; }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await firebaseAuth.signInWithPopup(provider);
+  } catch (error) {
+    if (['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(error.code)) {
+      await firebaseAuth.signInWithRedirect(provider);
+    } else {
+      showToast(error.code === 'auth/unauthorized-domain' ? 'Add mgdunn2.github.io to Firebase authorized domains' : 'Google sign-in did not complete');
+    }
+  }
+}
+
+function renderAccount(message='') {
+  if (!$('accountTitle')) return;
+  const signedIn = Boolean(currentUser);
+  $('accountTitle').textContent = signedIn ? (currentUser.displayName || currentUser.email || 'Signed in') : 'Local only';
+  $('accountStatus').textContent = message || (signedIn ? `Syncing sightings as ${currentUser.email || 'your Google account'}. Photos stay on this device.` : 'Sightings are stored only on this device.');
+  $('googleSignInButton').classList.toggle('hidden', signedIn);
+  $('signOutButton').classList.toggle('hidden', !signedIn);
+  $('uploadLocalButton').classList.toggle('hidden', !signedIn);
+  $('importAccountButton').classList.toggle('hidden', !signedIn);
+}
+
+function cloudSighting(item) {
+  const { photo, ...record } = item;
+  return { ...record, ownerUid:currentUser.uid, updatedAt:item.updatedAt || Date.now() };
+}
+
+async function syncSighting(item) {
+  if (!currentUser || !cloudDb) return;
+  await cloudDb.collection('users').doc(currentUser.uid).collection('sightings').doc(item.id).set(cloudSighting(item));
+  renderAccount('All account sightings synced.');
+}
+
+async function syncSettings() {
+  if (!currentUser || !cloudDb) return;
+  await cloudDb.collection('users').doc(currentUser.uid).collection('settings').doc('app').set({ ...settings, updatedAt:Date.now() });
+}
+
+async function startAccountSync(user) {
+  renderAccount('Connecting to your squirrel account…');
+  try {
+    await flushQueuedDeletes(user.uid);
+    const settingsDoc = await cloudDb.collection('users').doc(user.uid).collection('settings').doc('app').get();
+    if (settingsDoc.exists && settingsDoc.data()?.species?.length) {
+      const { updatedAt, ...remoteSettings } = settingsDoc.data();
+      settings = remoteSettings;
+      saveSettings();
+      renderAll();
+    }
+    let firstSnapshot = true;
+    unsubscribeCloud = cloudDb.collection('users').doc(user.uid).collection('sightings').onSnapshot(async snapshot => {
+      let changed = false;
+      const remoteIds = new Set(snapshot.docs.map(doc => doc.id));
+      for (const change of snapshot.docChanges()) {
+        const remote = { ...change.doc.data(), id:change.doc.id, ownerUid:user.uid };
+        const local = sightings.find(s => s.id === remote.id);
+        if (change.type === 'removed') {
+          if (local?.ownerUid === user.uid) {
+            await removeSighting(remote.id, false);
+            sightings = sightings.filter(s => s.id !== remote.id);
+            changed = true;
+          }
+        } else if (local && (local.updatedAt || 0) > (remote.updatedAt || 0)) {
+          await syncSighting(local);
+        } else {
+          const merged = { ...remote, photo:local?.photo || null };
+          await putSighting(merged, false);
+          sightings = sightings.filter(s => s.id !== merged.id);
+          sightings.push(merged);
+          changed = true;
+        }
+      }
+      if (changed) {
+        sightings.sort((a,b) => b.timestamp-a.timestamp);
+        renderAll();
+      }
+      if (firstSnapshot) {
+        firstSnapshot = false;
+        for (const local of sightings.filter(s => s.ownerUid === user.uid && !remoteIds.has(s.id))) await syncSighting(local);
+      }
+      renderAccount('All account sightings synced.');
+    }, () => renderAccount('Offline — account changes will sync later.'));
+  } catch {
+    renderAccount('Offline — using sightings stored on this device.');
+  }
+}
+
+function queuedDeletes() {
+  try { return JSON.parse(localStorage.getItem(PENDING_DELETES_KEY)) || []; }
+  catch { return []; }
+}
+
+function queueDelete(uid, id) {
+  const queue = queuedDeletes();
+  if (!queue.some(item => item.uid === uid && item.id === id)) queue.push({ uid, id });
+  localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(queue));
+}
+
+function clearQueuedDelete(uid, id) {
+  localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(queuedDeletes().filter(item => item.uid !== uid || item.id !== id)));
+}
+
+async function flushQueuedDeletes(uid) {
+  for (const item of queuedDeletes().filter(item => item.uid === uid)) {
+    await cloudDb.collection('users').doc(uid).collection('sightings').doc(item.id).delete();
+    clearQueuedDelete(uid, item.id);
+  }
+}
+
+async function uploadLocalSightings() {
+  if (!currentUser) return;
+  const local = sightings.filter(s => !s.ownerUid);
+  if (!local.length) { showToast('No local-only sightings to sync'); return; }
+  if (!confirm(`Add ${local.length} local sighting${local.length===1?'':'s'} to your account? Photos will remain only on this device.`)) return;
+  renderAccount('Uploading this device’s sightings…');
+  for (const item of local) {
+    item.ownerUid = currentUser.uid;
+    item.updatedAt = Date.now();
+    await putSighting(item);
+  }
+  await syncSettings();
+  renderAccount('All account sightings synced.');
+  showToast('Device sightings added to account');
 }
 
 function showToast(message) {

@@ -118,10 +118,20 @@
         <label class="toggle-row"><span><strong>Record GPS</strong><small>Ask for your location when you log a sighting.</small></span><input type="checkbox" id="gpsToggle"><i></i></label>
       </div>
       <div class="settings-section">
+        <h3>Account & sync</h3>
+        <div class="account-card" id="accountCard">
+          <div class="account-copy"><strong id="accountTitle">Local only</strong><small id="accountStatus">Sightings are stored only on this device.</small></div>
+          <button type="button" class="secondary-button" id="googleSignInButton">Sign in with Google</button>
+          <button type="button" class="secondary-button hidden" id="signOutButton">Sign out</button>
+        </div>
+        <button type="button" class="secondary-button account-import hidden" id="uploadLocalButton">Sync this device’s sightings</button>
+      </div>
+      <div class="settings-section">
         <h3>Backup</h3>
         <div class="backup-actions">
           <button type="button" class="secondary-button" id="exportButton">Export data</button>
-          <button type="button" class="secondary-button" id="importButton">Import data</button>
+          <button type="button" class="secondary-button" id="importButton">Import locally</button>
+          <button type="button" class="secondary-button hidden" id="importAccountButton">Import to account</button>
           <input type="file" id="importInput" accept="application/json" hidden>
         </div>
         <small class="helper">Export occasionally—browser data can be lost if site storage is cleared.</small>
@@ -169,6 +179,10 @@
   </dialog>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

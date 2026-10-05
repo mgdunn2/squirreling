@@ -129,6 +129,12 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .toggle-row input:checked + i { background: var(--forest-2); }
 .toggle-row input:checked + i::after { transform: translateX(19px); }
 .backup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.account-card { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #faf7ee; }
+.account-copy { flex: 1; min-width: 0; }
+.account-copy strong, .account-copy small { display: block; }
+.account-copy small { margin-top: 3px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.account-import { width: 100%; margin-top: 8px; }
+.hidden { display: none !important; }
 .secondary-button { padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f4f0e5; font-size: 11px; font-weight: 800; cursor: pointer; }
 .save-button { width: 100%; margin-top: 20px; padding: 13px; border: 0; border-radius: 14px; background: var(--forest); color: white; font-weight: 800; cursor: pointer; }
 .field-label { display: block; margin: 15px 0; font-size: 11px; font-weight: 800; }
