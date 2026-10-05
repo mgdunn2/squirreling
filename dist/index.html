@@ -33,8 +33,8 @@
 
         <button class="spot-button" id="primarySpotButton">
           <span class="spot-glow"></span>
-          <span class="spot-emoji" id="primaryEmoji">🐿️</span>
-          <strong id="primaryName">Tree squirrel</strong>
+          <img class="primary-taxon-photo" id="primaryImage" alt="Eastern gray squirrel" referrerpolicy="no-referrer">
+          <strong id="primaryName">Eastern gray squirrel</strong>
           <small>Tap to spot</small>
         </button>
 
@@ -85,7 +85,7 @@
           <div id="map" aria-label="Map of squirrel sightings"></div>
           <div class="map-empty" id="mapEmpty"><span>📍</span><strong>No mapped squirrels yet</strong><p>Your next GPS-tagged sighting will appear here.</p></div>
         </div>
-        <p class="map-note">Map tiles require internet. Your sightings and coordinates stay on this device.</p>
+        <p class="map-note">Map tiles and first-time wildlife photo loads require internet. Personal sighting photos remain on their original device.</p>
       </section>
 
       <section class="view" id="historyView" aria-labelledby="historyTab">
@@ -113,9 +113,13 @@
   <dialog id="settingsDialog">
     <form method="dialog" class="dialog-card">
       <div class="dialog-header"><div><p class="eyebrow">MAKE IT YOURS</p><h2>Squirrel setup</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
-      <p class="dialog-intro">Choose the main spotting button and the smaller shortcuts shown at home.</p>
+      <p class="dialog-intro">Choose the main spotting button and the smaller taxonomic shortcuts shown at home.</p>
       <div class="species-editor" id="speciesEditor"></div>
-      <button type="button" class="add-species" id="addSpeciesButton">＋ Add a squirrel type</button>
+      <div class="settings-section">
+        <h3>Identification review</h3>
+        <p class="helper" id="taxonomyReviewCount"></p>
+        <button type="button" class="secondary-button account-import" id="reviewTaxonomyButton">Review broad sightings</button>
+      </div>
       <div class="settings-section">
         <h3>Location</h3>
         <label class="toggle-row"><span><strong>Record GPS</strong><small>Ask for your location when you log a sighting.</small></span><input type="checkbox" id="gpsToggle"><i></i></label>
@@ -146,16 +150,30 @@
         </div>
         <small class="helper">Export occasionally—browser data can be lost if site storage is cleared.</small>
       </div>
+      <div class="settings-section">
+        <h3>Wildlife photos</h3>
+        <small class="helper photo-credits">Photos via Wikimedia Commons: <a href="https://commons.wikimedia.org/wiki/File:Eastern_Grey_Squirrel.jpg" target="_blank" rel="noopener">Tom Friedel/BirdPhotos.com</a> (CC BY 3.0), <a href="https://commons.wikimedia.org/wiki/User:Ryan_Hodnett" target="_blank" rel="noopener">Ryan Hodnett</a> (CC BY-SA 4.0), <a href="https://commons.wikimedia.org/wiki/File:Fox_Squirrel_(Sciurus_niger)_(16756760102).jpg" target="_blank" rel="noopener">Andrew C</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Southern_Flying_Squirrel_-_Glaucomys_volans,_Arlington,_Virginia,_December_22,_2020_(53406816432).jpg" target="_blank" rel="noopener">Judy Gallagher</a> (CC BY 2.0), National Park Service (public domain), and the <a href="https://commons.wikimedia.org/wiki/File:Groundhog_-_Marmota_monax,_Leesylvania_State_Park,_Woodbridge,_Virginia_cropped.jpg" target="_blank" rel="noopener">Leesylvania groundhog image</a> (CC BY-SA 4.0). Photos are cropped in the interface. <a href="https://creativecommons.org/licenses/" target="_blank" rel="noopener">License details</a>.</small>
+      </div>
       <button class="save-button" value="default" id="saveSettingsButton">Save changes</button>
     </form>
   </dialog>
 
-  <dialog id="addSpeciesDialog">
+  <dialog id="taxonomyReviewDialog">
     <form method="dialog" class="dialog-card compact">
-      <div class="dialog-header"><h2>Add a squirrel</h2><button class="close-button" value="cancel" aria-label="Close">×</button></div>
-      <label class="field-label">Name<input id="newSpeciesName" maxlength="32" placeholder="e.g. Prairie dog"></label>
-      <label class="field-label">Emoji<input id="newSpeciesEmoji" maxlength="4" value="🐿️"></label>
-      <button class="save-button" value="default" id="confirmSpeciesButton">Add squirrel</button>
+      <div class="dialog-header"><div><p class="eyebrow">IDENTIFICATION REVIEW</p><h2>Refine sightings</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <p class="dialog-intro">Older broad labels stay broad until you choose a species. Location is shown when available, but the app never guesses automatically.</p>
+      <div class="taxonomy-review-list" id="taxonomyReviewList"></div>
+      <button type="button" class="save-button" id="saveTaxonomyReview">Save identifications</button>
+    </form>
+  </dialog>
+
+  <dialog id="identificationDialog">
+    <form method="dialog" class="dialog-card compact" id="identificationForm">
+      <div class="dialog-header"><div><p class="eyebrow">TAXONOMY</p><h2>Refine identification</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <p class="dialog-intro">Use the most precise identification you are confident about. Black coloration is recorded as a form of eastern gray squirrel.</p>
+      <input type="hidden" id="identificationTarget">
+      <label class="field-label">Classification<select id="identificationSelect" required></select></label>
+      <button type="submit" class="save-button">Save identification</button>
     </form>
   </dialog>
 

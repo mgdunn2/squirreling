@@ -2,19 +2,36 @@ const DB_NAME = 'squirreling-db';
 const DB_VERSION = 1;
 const SETTINGS_KEY = 'squirreling-settings-v1';
 const PENDING_DELETES_KEY = 'squirreling-pending-deletes-v1';
+const TAXONOMY_VERSION = 2;
+
+const TAXA = [
+  { id:'eastern-gray', taxonId:'sciurus-carolinensis', name:'Eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' },
+  { id:'eastern-gray-melanistic', taxonId:'sciurus-carolinensis', name:'Black eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', traits:['melanistic'], image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg/960px-Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg' },
+  { id:'fox-squirrel', taxonId:'sciurus-niger', name:'Fox squirrel', scientific:'Sciurus niger', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg/960px-Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg' },
+  { id:'american-red', taxonId:'tamiasciurus-hudsonicus', name:'American red squirrel', scientific:'Tamiasciurus hudsonicus', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Tamiasciurus_hudsonicus.jpg/960px-Tamiasciurus_hudsonicus.jpg' },
+  { id:'eastern-chipmunk', taxonId:'tamias-striatus', name:'Eastern chipmunk', scientific:'Tamias striatus', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
+  { id:'chipmunk-unspecified', taxonId:'chipmunks', name:'Chipmunk — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
+  { id:'groundhog', taxonId:'marmota-monax', name:'Groundhog', scientific:'Marmota monax', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
+  { id:'marmot-unspecified', taxonId:'marmota', name:'Marmot — species unknown', scientific:'Marmota', rank:'genus', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
+  { id:'southern-flying', taxonId:'glaucomys-volans', name:'Southern flying squirrel', scientific:'Glaucomys volans', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
+  { id:'flying-unspecified', taxonId:'glaucomys', name:'Flying squirrel — species unknown', scientific:'Glaucomys', rank:'genus', identification:'broad', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
+  { id:'tree-squirrel-unspecified', taxonId:'tree-squirrels', name:'Tree squirrel — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' },
+  { id:'other-sciurid', taxonId:'sciuridae', name:'Other squirrel-family animal', scientific:'Sciuridae', rank:'family', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' }
+];
+
+const TAXON_BY_ID = new Map(TAXA.map(taxon => [taxon.id, taxon]));
 
 const defaultSettings = {
+  taxonomyVersion: TAXONOMY_VERSION,
   gps: true,
-  primaryId: 'tree',
-  species: [
-    { id: 'tree', name: 'Tree squirrel', emoji: '🐿️', visible: true },
-    { id: 'chipmunk', name: 'Chipmunk', emoji: '🌰', visible: true },
-    { id: 'groundhog', name: 'Groundhog', emoji: '🪵', visible: true },
-    { id: 'flying', name: 'Flying squirrel', emoji: '🪽', visible: true },
-    { id: 'other', name: 'Other sciurid', emoji: '🔎', visible: true }
-  ]
+  primaryId: 'eastern-gray',
+  visibleIds: ['eastern-gray-melanistic','chipmunk-unspecified','marmot-unspecified']
 };
 
+const legacySettingsSpecies = (() => {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY))?.species || []; }
+  catch { return []; }
+})();
 let settings = loadSettings();
 let sightings = [];
 let db;
@@ -51,7 +68,7 @@ const fmtMonth = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'nume
 function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-    return saved?.species?.length ? saved : structuredClone(defaultSettings);
+    return migrateSettings(saved);
   } catch { return structuredClone(defaultSettings); }
 }
 function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
@@ -59,8 +76,58 @@ function dateKey(value) {
   const d = new Date(value);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-function speciesFor(id) { return settings.species.find(s => s.id === id) || { name: 'Squirrel', emoji: '🐿️' }; }
-function displaySpecies(item) { return item.speciesName ? { name:item.speciesName, emoji:item.speciesEmoji || '🐿️' } : speciesFor(item.speciesId); }
+function normalizeLabel(value='') { return String(value).trim().toLowerCase().replace(/[–—]/g,'-').replace(/\s+/g,' '); }
+function legacyClassification(id, label='') {
+  const key = normalizeLabel(label || id);
+  if (['tree','tree squirrel'].includes(key)) return 'eastern-gray';
+  if (['black tree squirrel','black squirrel','melanistic tree squirrel'].includes(key)) return 'eastern-gray-melanistic';
+  if (key === 'chipmunk') return 'chipmunk-unspecified';
+  if (key === 'marmot') return 'marmot-unspecified';
+  if (['groundhog','woodchuck'].includes(key)) return 'groundhog';
+  if (['flying','flying squirrel'].includes(key)) return 'flying-unspecified';
+  if (['other','other sciurid','other squirrel-family animal'].includes(key)) return 'other-sciurid';
+  return TAXON_BY_ID.has(id) ? id : null;
+}
+function migrateSettings(saved) {
+  if (!saved) return structuredClone(defaultSettings);
+  if (saved.taxonomyVersion === TAXONOMY_VERSION && Array.isArray(saved.visibleIds)) return { ...structuredClone(defaultSettings), ...saved };
+  const legacySpecies = Array.isArray(saved.species) ? saved.species : [];
+  const mapped = legacySpecies.map(s => legacyClassification(s.id, s.name)).filter(Boolean);
+  const primaryLegacy = legacySpecies.find(s => s.id === saved.primaryId);
+  const primaryId = legacyClassification(saved.primaryId, primaryLegacy?.name) || 'eastern-gray';
+  return { taxonomyVersion:TAXONOMY_VERSION, gps:saved.gps !== false, primaryId, visibleIds:[...new Set(mapped.filter(id => id !== primaryId))] };
+}
+function classificationFor(id) { return TAXON_BY_ID.get(id) || TAXON_BY_ID.get('other-sciurid'); }
+function speciesFor(id) { return classificationFor(id); }
+function displaySpecies(item) {
+  const id=item.classificationId || item.speciesId;
+  const known = classificationFor(id);
+  if (TAXON_BY_ID.has(id)) return known;
+  return { ...known, id, name:item.commonName || item.speciesName || known.name, scientific:item.scientificName || null };
+}
+function applyClassification(item, classificationId, legacyLabel=null) {
+  const taxon = classificationFor(classificationId);
+  Object.assign(item, {
+    classificationId:taxon.id, speciesId:taxon.id, taxonId:taxon.taxonId, taxonRank:taxon.rank,
+    commonName:taxon.name, scientificName:taxon.scientific, traits:[...(taxon.traits || [])],
+    identification:taxon.identification, taxonomyVersion:TAXONOMY_VERSION
+  });
+  if (legacyLabel && !item.legacyLabel) item.legacyLabel = legacyLabel;
+  delete item.speciesName;
+  delete item.speciesEmoji;
+  return item;
+}
+function migrateSighting(item, legacySpecies=[]) {
+  if (item.taxonomyVersion === TAXONOMY_VERSION && item.classificationId) return { item, changed:false };
+  const legacy = legacySpecies.find(s => s.id === item.speciesId);
+  const label = item.commonName || item.speciesName || legacy?.name || item.speciesId || 'Squirrel';
+  const classificationId = legacyClassification(item.speciesId, label);
+  if (classificationId) return { item:applyClassification({ ...item }, classificationId, label), changed:true };
+  const custom = { ...item, classificationId:'legacy:' + normalizeLabel(label).replace(/[^a-z0-9]+/g,'-'), taxonId:'sciuridae', taxonRank:'unclassified', commonName:label, scientificName:null, traits:[], identification:'broad', taxonomyVersion:TAXONOMY_VERSION, legacyLabel:label };
+  return { item:custom, changed:true };
+}
+function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtml(taxon.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer">'; }
+function scientificLine(taxon) { return taxon.scientific ? '<em>' + escapeHtml(taxon.scientific) + '</em>' : 'Broad identification'; }
 
 function filteredFeedSightings() {
   if (feedFilter === 'friends') return [...friendSightings].sort((a,b)=>b.timestamp-a.timestamp);
@@ -127,7 +194,18 @@ async function removeSighting(id, sync=true) {
 
 async function init() {
   db = await openDb();
-  sightings = (await readAll()).sort((a,b) => b.timestamp - a.timestamp);
+  const stored = await readAll();
+  sightings = [];
+  for (const original of stored) {
+    const migrated = migrateSighting(original, legacySettingsSpecies);
+    if (migrated.changed) {
+      migrated.item.updatedAt = Date.now();
+      await putSighting(migrated.item, false);
+    }
+    sightings.push(migrated.item);
+  }
+  sightings.sort((a,b) => b.timestamp - a.timestamp);
+  saveSettings();
   bindEvents();
   renderAll();
   initFirebase();
@@ -147,9 +225,10 @@ function bindEvents() {
   $('savePickedLocation').addEventListener('click', savePickedLocation);
   $('settingsButton').addEventListener('click', openSettings);
   $('customizeButton').addEventListener('click', openSettings);
-  $('addSpeciesButton').addEventListener('click', () => $('addSpeciesDialog').showModal());
-  $('confirmSpeciesButton').addEventListener('click', addSpecies);
   $('saveSettingsButton').addEventListener('click', commitSettings);
+  $('reviewTaxonomyButton').addEventListener('click', openTaxonomyReview);
+  $('saveTaxonomyReview').addEventListener('click', saveTaxonomyReview);
+  $('identificationForm').addEventListener('submit', saveIdentificationEdit);
   $('gpsToggle').addEventListener('change', e => settings.gps = e.target.checked);
   $('prevMonth').addEventListener('click', () => changeMonth(-1));
   $('nextMonth').addEventListener('click', () => changeMonth(1));
@@ -176,7 +255,7 @@ function switchView(viewId) {
 
 async function recordSighting(speciesId, photo = null) {
   const now = Date.now();
-  const item = { id: crypto.randomUUID(), speciesId, timestamp: now, latitude: null, longitude: null, accuracy: null, photo, ownerUid:currentUser?.uid || null, updatedAt:now };
+  const item = applyClassification({ id:crypto.randomUUID(), timestamp:now, latitude:null, longitude:null, accuracy:null, photo, ownerUid:currentUser?.uid || null, updatedAt:now }, speciesId);
   await putSighting(item);
   sightings.unshift(item);
   renderAll();
@@ -184,7 +263,7 @@ async function recordSighting(speciesId, photo = null) {
   $('primarySpotButton').classList.remove('pulse');
   void $('primarySpotButton').offsetWidth;
   $('primarySpotButton').classList.add('pulse');
-  showToast(`${species.emoji} ${species.name} spotted!`);
+  showToast(`${species.name} spotted!`);
   if (settings.gps && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(async pos => {
       item.latitude = pos.coords.latitude;
@@ -206,7 +285,7 @@ function localDateTimeValue(date = new Date()) {
 }
 
 function openPastSighting() {
-  $('pastSpecies').innerHTML = settings.species.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.emoji)} ${escapeHtml(s.name)}</option>`).join('');
+  $('pastSpecies').innerHTML = taxonomyOptions(settings.primaryId);
   $('pastSpecies').value = settings.primaryId;
   $('pastDateTime').value = localDateTimeValue();
   $('pastDateTime').max = localDateTimeValue();
@@ -259,9 +338,8 @@ async function savePastSighting(event) {
     showToast('Choose a valid time in the past');
     return;
   }
-  const item = {
+  const item = applyClassification({
     id: crypto.randomUUID(),
-    speciesId: $('pastSpecies').value,
     timestamp,
     latitude: Number.isFinite(pendingPastLocation?.latitude) ? pendingPastLocation.latitude : null,
     longitude: Number.isFinite(pendingPastLocation?.longitude) ? pendingPastLocation.longitude : null,
@@ -269,7 +347,7 @@ async function savePastSighting(event) {
     photo: pendingPastPhoto,
     ownerUid: currentUser?.uid || null,
     updatedAt: Date.now()
-  };
+  }, $('pastSpecies').value);
   await putSighting(item);
   sightings.push(item);
   sightings.sort((a,b) => b.timestamp - a.timestamp);
@@ -281,7 +359,7 @@ async function savePastSighting(event) {
   selectedDate = dateKey(timestamp);
   renderAll();
   const species = speciesFor(item.speciesId);
-  showToast(`${species.emoji} Past sighting added`);
+  showToast(`${species.name} added`);
 }
 
 function updatePastLocationSummary() {
@@ -501,18 +579,19 @@ function renderHome() {
   $('todayLabel').textContent = new Intl.DateTimeFormat(undefined, { weekday:'long', month:'long', day:'numeric' }).format(new Date()).toUpperCase();
   $('todayCount').textContent = count;
   $('dailyPrompt').textContent = count ? (count > 4 ? 'A banner day for squirrels.' : 'The count is officially underway.') : 'Keep your eyes on the trees.';
-  $('primaryEmoji').textContent = primary.emoji;
+  $('primaryImage').src = primary.image;
+  $('primaryImage').alt = primary.name;
   $('primaryName').textContent = primary.name;
-  const quick = settings.species.filter(s => s.visible && s.id !== settings.primaryId);
-  $('quickGrid').innerHTML = quick.length ? quick.map(s => `<button class="quick-button" data-species="${escapeHtml(s.id)}"><span>${escapeHtml(s.emoji)}</span>${escapeHtml(s.name)}</button>`).join('') : '<div class="empty-state">Add shortcuts in Customize.</div>';
+  const quick = settings.visibleIds.filter(id => id !== settings.primaryId).map(classificationFor);
+  $('quickGrid').innerHTML = quick.length ? quick.map(s => `<button class="quick-button" data-species="${escapeHtml(s.id)}">${taxonImage(s)}<span><strong>${escapeHtml(s.name)}</strong><small>${scientificLine(s)}</small></span></button>`).join('') : '<div class="empty-state">Add shortcuts in Customize.</div>';
   $('quickGrid').querySelectorAll('[data-species]').forEach(b => b.addEventListener('click', () => recordSighting(b.dataset.species)));
   const last = sightings[0];
   $('lastCard').classList.toggle('hidden', !last);
   if (last) {
-    const sp = speciesFor(last.speciesId);
+    const sp = displaySpecies(last);
     $('lastName').textContent = sp.name;
     $('lastMeta').textContent = `${fmtTime.format(last.timestamp)}${last.latitude ? ' · location saved' : ''}`;
-    $('lastThumb').innerHTML = last.photo ? `<img src="${last.photo}" alt="Latest squirrel">` : sp.emoji;
+    $('lastThumb').innerHTML = last.photo ? `<img src="${last.photo}" alt="Latest squirrel">` : taxonImage(sp);
   }
 }
 
@@ -546,7 +625,7 @@ function changeMonth(delta) {
 function renderHistory() {
   const visible = filteredFeedSightings();
   $('totalCount').textContent = visible.length;
-  $('speciesCount').textContent = new Set(visible.map(s=>s.speciesId)).size;
+  $('speciesCount').textContent = new Set(visible.map(s=>s.taxonId || s.speciesId)).size;
   $('streakCount').textContent = calculateStreak(visible);
   renderList($('allSightings'), visible, 'No sightings match this filter.', true);
 }
@@ -564,18 +643,19 @@ function renderList(container, items, empty, showDate=false) {
   container.innerHTML = items.map(s => {
     const sp = displaySpecies(s);
     const owner = s.friendUid ? `${escapeHtml(s.ownerName || 'Friend')} · ` : '';
-    return `<button class="sighting-row" data-id="${s.id}" data-friend="${escapeHtml(s.friendUid || '')}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:escapeHtml(sp.emoji)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${owner}${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
+    return `<button class="sighting-row" data-id="${s.id}" data-friend="${escapeHtml(s.friendUid || '')}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:taxonImage(sp)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${owner}${sp.scientific?`<i>${escapeHtml(sp.scientific)}</i> · `:''}${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
   }).join('');
   container.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => b.dataset.friend ? showFriendDetail(b.dataset.id, b.dataset.friend) : showDetail(b.dataset.id)));
 }
 
 function showDetail(id) {
   const item = sightings.find(s => s.id === id); if (!item) return;
-  const sp = speciesFor(item.speciesId);
-  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:''}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</h2></div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}${item.accuracy?` · ±${item.accuracy}m`:''}`:'No GPS coordinates'}</p>${Number.isFinite(item.latitude)?'':`<button class="secondary-button add-location-button" id="addLocationToSighting">📍 Choose location on map</button>`}<div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
+  const sp = displaySpecies(item);
+  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:`<div class="detail-taxon-photo">${taxonImage(sp)}</div>`}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em>${item.traits?.length?` · ${escapeHtml(item.traits.join(', '))}`:''}</p>`:''}</div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}${item.accuracy?` · ±${item.accuracy}m`:''}`:'No GPS coordinates'}</p><button class="secondary-button refine-button" id="refineSighting">Refine identification</button>${Number.isFinite(item.latitude)?'':`<button class="secondary-button add-location-button" id="addLocationToSighting">📍 Choose location on map</button>`}<div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
   $('detailDialog').showModal();
   $('closeDetail').onclick = $('closeDetail2').onclick = () => $('detailDialog').close();
   if ($('addLocationToSighting')) $('addLocationToSighting').onclick = () => openLocationPicker(item.id);
+  $('refineSighting').onclick = () => openIdentificationEditor(item.id);
   $('deleteSighting').onclick = async () => {
     if (!confirm('Delete this squirrel sighting?')) return;
     await removeSighting(item.id);
@@ -587,9 +667,29 @@ function showDetail(id) {
 function showFriendDetail(id, friendUid) {
   const item = friendSightings.find(s => s.id === id && s.friendUid === friendUid); if (!item) return;
   const sp = displaySpecies(item);
-  $('detailContent').innerHTML = `<div class="dialog-header"><div><p class="eyebrow">${escapeHtml((item.ownerName || 'FRIEND').toUpperCase())}</p><h2>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</h2></div><button class="close-button" id="closeFriendDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`:'No GPS coordinates'}<br>Photos remain private on their device.</p><button class="secondary-button" id="doneFriendDetail">Done</button>`;
+  $('detailContent').innerHTML = `<div class="detail-taxon-photo">${taxonImage(sp)}</div><div class="dialog-header"><div><p class="eyebrow">${escapeHtml((item.ownerName || 'FRIEND').toUpperCase())}</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em></p>`:''}</div><button class="close-button" id="closeFriendDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`:'No GPS coordinates'}<br>Photos remain private on their device.</p><button class="secondary-button" id="doneFriendDetail">Done</button>`;
   $('detailDialog').showModal();
   $('closeFriendDetail').onclick = $('doneFriendDetail').onclick = () => $('detailDialog').close();
+}
+
+function openIdentificationEditor(id) {
+  const item=sightings.find(s=>s.id===id); if (!item) return;
+  $('identificationSelect').innerHTML=taxonomyOptions(item.classificationId || item.speciesId);
+  $('identificationTarget').value=id;
+  $('detailDialog').close();
+  $('identificationDialog').showModal();
+}
+
+async function saveIdentificationEdit(event) {
+  event.preventDefault();
+  const item=sightings.find(s=>s.id===$('identificationTarget').value); if (!item) return;
+  applyClassification(item,$('identificationSelect').value);
+  item.updatedAt=Date.now();
+  await putSighting(item);
+  $('identificationDialog').close();
+  renderAll();
+  showDetail(item.id);
+  showToast('Identification updated');
 }
 
 const MAP_PIN_COLORS = ['#276749','#d97706','#2563eb','#9333ea','#dc2626','#0891b2','#c026d3','#4d7c0f'];
@@ -633,7 +733,7 @@ function renderMap() {
   mapped.forEach(s => {
     const sp = displaySpecies(s);
     const person = people.get(s.friendUid || currentUser?.uid || 'me');
-    L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.emoji)} ${escapeHtml(sp.name)}</strong><br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
+    L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.name)}</strong>${sp.scientific?`<br><em>${escapeHtml(sp.scientific)}</em>`:''}<br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
   });
   if (mapped.length === 1) map.setView([mapped[0].latitude,mapped[0].longitude], 15);
   if (mapped.length > 1) map.fitBounds(L.latLngBounds(mapped.map(s=>[s.latitude,s.longitude])), { padding:[28,28] });
@@ -642,28 +742,78 @@ function renderMap() {
 
 function openSettings() {
   renderSpeciesEditor();
+  renderTaxonomyReviewStatus();
   $('gpsToggle').checked = settings.gps;
   $('settingsDialog').showModal();
 }
 
 function renderSpeciesEditor() {
-  $('speciesEditor').innerHTML = settings.species.map(s => `<div class="species-edit-row ${s.id===settings.primaryId?'primary':''}" data-id="${escapeHtml(s.id)}"><input type="radio" name="primary" value="${escapeHtml(s.id)}" ${s.id===settings.primaryId?'checked':''} aria-label="Make primary"><input class="emoji-edit" value="${escapeHtml(s.emoji)}" maxlength="4" aria-label="Emoji"><input class="name-edit" value="${escapeHtml(s.name)}" maxlength="32" aria-label="Species name"><button type="button" class="visibility-button" aria-label="${s.visible?'Hide':'Show'} shortcut">${s.visible?'◉':'○'}</button></div>`).join('');
+  $('speciesEditor').innerHTML = TAXA.map(s => `<div class="species-edit-row ${s.id===settings.primaryId?'primary':''}" data-id="${escapeHtml(s.id)}">${taxonImage(s)}<span class="taxon-copy"><strong>${escapeHtml(s.name)}</strong><small>${scientificLine(s)}</small></span><label class="default-choice"><input type="radio" name="primary" value="${escapeHtml(s.id)}" ${s.id===settings.primaryId?'checked':''}><span>Default</span></label><button type="button" class="visibility-button" aria-label="${settings.visibleIds.includes(s.id)?'Remove from':'Add to'} shortcuts">${settings.visibleIds.includes(s.id)?'Shown':'Add'}</button></div>`).join('');
   $('speciesEditor').querySelectorAll('.species-edit-row').forEach(row => {
-    const s = settings.species.find(x=>x.id===row.dataset.id);
-    row.querySelector('[type=radio]').onchange = () => { settings.primaryId=s.id; renderSpeciesEditor(); };
-    row.querySelector('.emoji-edit').oninput = e => s.emoji=e.target.value || '🐿️';
-    row.querySelector('.name-edit').oninput = e => s.name=e.target.value || 'Squirrel';
-    row.querySelector('.visibility-button').onclick = () => { s.visible=!s.visible; renderSpeciesEditor(); };
+    row.querySelector('[type=radio]').onchange = () => {
+      settings.primaryId=row.dataset.id;
+      settings.visibleIds=settings.visibleIds.filter(id=>id!==row.dataset.id);
+      renderSpeciesEditor();
+    };
+    row.querySelector('.visibility-button').onclick = () => {
+      const id=row.dataset.id;
+      settings.visibleIds=settings.visibleIds.includes(id) ? settings.visibleIds.filter(value=>value!==id) : [...settings.visibleIds,id];
+      renderSpeciesEditor();
+    };
   });
 }
 
-function addSpecies(event) {
-  const name = $('newSpeciesName').value.trim();
-  if (!name) { event.preventDefault(); return; }
-  const id = `custom-${Date.now()}`;
-  settings.species.push({ id, name, emoji:$('newSpeciesEmoji').value.trim() || '🐿️', visible:true });
-  $('newSpeciesName').value=''; $('newSpeciesEmoji').value='🐿️';
-  setTimeout(() => { renderSpeciesEditor(); if (!$('settingsDialog').open) $('settingsDialog').showModal(); }, 0);
+function taxonomyOptions(selected='') {
+  const exact = TAXA.filter(t => t.identification === 'exact');
+  const broad = TAXA.filter(t => t.identification === 'broad');
+  const options = items => items.map(t => `<option value="${escapeHtml(t.id)}" ${t.id===selected?'selected':''}>${escapeHtml(t.name)}${t.scientific?` — ${escapeHtml(t.scientific)}`:''}</option>`).join('');
+  return `<optgroup label="Specific species and forms">${options(exact)}</optgroup><optgroup label="Broader identifications">${options(broad)}</optgroup>`;
+}
+
+function unresolvedSightings() {
+  return sightings.filter(item => item.identification === 'broad');
+}
+
+function reviewChoices(item) {
+  const id=item.classificationId || item.speciesId;
+  const groups = {
+    'chipmunk-unspecified':['chipmunk-unspecified','eastern-chipmunk'],
+    'marmot-unspecified':['marmot-unspecified','groundhog'],
+    'flying-unspecified':['flying-unspecified','southern-flying'],
+    'tree-squirrel-unspecified':['tree-squirrel-unspecified','eastern-gray','eastern-gray-melanistic','fox-squirrel','american-red']
+  };
+  return (groups[id] || TAXA.map(t=>t.id)).map(classificationFor);
+}
+
+function renderTaxonomyReviewStatus() {
+  const count=unresolvedSightings().length;
+  $('taxonomyReviewCount').textContent = count ? `${count} broad identification${count===1?'':'s'} to review.` : 'All sightings use the most precise identification you recorded.';
+  $('reviewTaxonomyButton').disabled = !count;
+}
+
+function openTaxonomyReview() {
+  const unresolved=unresolvedSightings();
+  $('taxonomyReviewList').innerHTML = unresolved.map(item => {
+    const current=displaySpecies(item);
+    const options=reviewChoices(item).map(t=>`<option value="${escapeHtml(t.id)}" ${t.id===(item.classificationId||item.speciesId)?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+    return `<label class="review-row" data-id="${escapeHtml(item.id)}"><span><strong>${escapeHtml(current.name)}</strong><small>${new Date(item.timestamp).toLocaleDateString()}${Number.isFinite(item.latitude)?' · location saved':''}</small></span><select>${options}</select></label>`;
+  }).join('');
+  $('settingsDialog').close();
+  $('taxonomyReviewDialog').showModal();
+}
+
+async function saveTaxonomyReview() {
+  const rows=[...$('taxonomyReviewList').querySelectorAll('.review-row')];
+  for (const row of rows) {
+    const item=sightings.find(s=>s.id===row.dataset.id);
+    if (!item || row.querySelector('select').value === (item.classificationId || item.speciesId)) continue;
+    applyClassification(item,row.querySelector('select').value);
+    item.updatedAt=Date.now();
+    await putSighting(item);
+  }
+  $('taxonomyReviewDialog').close();
+  renderAll();
+  showToast('Identifications updated');
 }
 
 function commitSettings() {
@@ -674,7 +824,7 @@ function commitSettings() {
 }
 
 async function exportData() {
-  const payload = { app:'Squirreling', version:1, exportedAt:new Date().toISOString(), settings, sightings };
+  const payload = { app:'Squirreling', version:2, taxonomyVersion:TAXONOMY_VERSION, exportedAt:new Date().toISOString(), settings, sightings };
   const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`squirreling-backup-${dateKey(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href);
   showToast('Backup exported');
@@ -684,12 +834,14 @@ async function importData(event) {
   const file=event.target.files?.[0]; if (!file) return;
   try {
     const data=JSON.parse(await file.text());
-    if (!Array.isArray(data.sightings) || !data.settings?.species) throw new Error();
+    if (!Array.isArray(data.sightings) || !data.settings) throw new Error();
     const intoAccount = importTarget === 'account' && currentUser;
     if (!confirm(`Import ${data.sightings.length} sightings ${intoAccount?'into your account':'on this device only'}? Existing sightings with different IDs will be kept.`)) return;
-    settings=data.settings; saveSettings();
+    const importLegacySpecies=Array.isArray(data.settings.species)?data.settings.species:[];
+    settings=migrateSettings(data.settings); saveSettings();
     for (const original of data.sightings) {
-      const item = { ...original, ownerUid:intoAccount?currentUser.uid:null, updatedAt:Date.now() };
+      const migrated=migrateSighting(original,importLegacySpecies);
+      const item = { ...migrated.item, ownerUid:intoAccount?currentUser.uid:null, updatedAt:Date.now() };
       await putSighting(item, Boolean(intoAccount));
     }
     if (intoAccount) await syncSettings();
@@ -748,8 +900,8 @@ function renderAccount(message='') {
 
 function cloudSighting(item) {
   const { photo, ...record } = item;
-  const sp = speciesFor(item.speciesId);
-  return { ...record, ownerUid:currentUser.uid, ownerName:currentUser.displayName || currentUser.email || 'Squirreler', speciesName:sp.name, speciesEmoji:sp.emoji, updatedAt:item.updatedAt || Date.now() };
+  const sp = displaySpecies(item);
+  return { ...record, ownerUid:currentUser.uid, ownerName:currentUser.displayName || currentUser.email || 'Squirreler', commonName:sp.name, scientificName:sp.scientific || null, updatedAt:item.updatedAt || Date.now() };
 }
 
 async function syncSighting(item) {
@@ -768,18 +920,20 @@ async function startAccountSync(user) {
   try {
     await flushQueuedDeletes(user.uid);
     const settingsDoc = await cloudDb.collection('users').doc(user.uid).collection('settings').doc('app').get();
-    if (settingsDoc.exists && settingsDoc.data()?.species?.length) {
+    if (settingsDoc.exists) {
       const { updatedAt, ...remoteSettings } = settingsDoc.data();
-      settings = remoteSettings;
+      settings = migrateSettings(remoteSettings);
       saveSettings();
       renderAll();
+      if (remoteSettings.taxonomyVersion !== TAXONOMY_VERSION) await syncSettings();
     }
     let firstSnapshot = true;
     unsubscribeCloud = cloudDb.collection('users').doc(user.uid).collection('sightings').onSnapshot(async snapshot => {
       let changed = false;
       const remoteIds = new Set(snapshot.docs.map(doc => doc.id));
       for (const change of snapshot.docChanges()) {
-        const remote = { ...change.doc.data(), id:change.doc.id, ownerUid:user.uid };
+        const migratedRemote = migrateSighting({ ...change.doc.data(), id:change.doc.id, ownerUid:user.uid });
+        const remote = migratedRemote.item;
         const local = sightings.find(s => s.id === remote.id);
         if (change.type === 'removed') {
           if (local?.ownerUid === user.uid) {
@@ -794,6 +948,7 @@ async function startAccountSync(user) {
           await putSighting(merged, false);
           sightings = sightings.filter(s => s.id !== merged.id);
           sightings.push(merged);
+          if (migratedRemote.changed) await syncSighting(merged);
           changed = true;
         }
       }
@@ -848,7 +1003,10 @@ function startFriendSightingListeners() {
   friends.forEach(friend => {
     const unsubscribe=cloudDb.collection('users').doc(friend.uid).collection('sightings').onSnapshot(snapshot => {
       friendSightings=friendSightings.filter(s=>s.friendUid!==friend.uid);
-      snapshot.docs.forEach(doc=>friendSightings.push({ ...doc.data(), id:doc.id, friendUid:friend.uid, ownerName:friend.name || friend.email || doc.data().ownerName || 'Friend', photo:null }));
+      snapshot.docs.forEach(doc=>{
+        const migrated=migrateSighting({ ...doc.data(), id:doc.id });
+        friendSightings.push({ ...migrated.item, friendUid:friend.uid, ownerName:friend.name || friend.email || doc.data().ownerName || 'Friend', photo:null });
+      });
       renderHistory(); renderFeedFilters();
       if ($('mapView').classList.contains('active')) renderMap();
     });
