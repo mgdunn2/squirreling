@@ -8,16 +8,17 @@ const TAXA = [
   { id:'eastern-gray', taxonId:'sciurus-carolinensis', name:'Eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' },
   { id:'eastern-gray-melanistic', taxonId:'sciurus-carolinensis', name:'Black eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', traits:['melanistic'], image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg/960px-Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg' },
   { id:'fox-squirrel', taxonId:'sciurus-niger', name:'Fox squirrel', scientific:'Sciurus niger', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg/960px-Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg' },
-  { id:'american-red', taxonId:'tamiasciurus-hudsonicus', name:'American red squirrel', scientific:'Tamiasciurus hudsonicus', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Tamiasciurus_hudsonicus.jpg/960px-Tamiasciurus_hudsonicus.jpg' },
-  { id:'eastern-chipmunk', taxonId:'tamias-striatus', name:'Eastern chipmunk', scientific:'Tamias striatus', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
-  { id:'chipmunk-unspecified', taxonId:'chipmunks', name:'Chipmunk — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
+  { id:'american-red', taxonId:'tamiasciurus-hudsonicus', name:'American red squirrel', scientific:'Tamiasciurus hudsonicus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Tamiasciurus_hudsonicus.jpg/960px-Tamiasciurus_hudsonicus.jpg' },
+  { id:'eastern-chipmunk', taxonId:'tamias-striatus', name:'Eastern chipmunk', scientific:'Tamias striatus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
+  { id:'chipmunk-unspecified', taxonId:'chipmunks', name:'Chipmunk — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
   { id:'groundhog', taxonId:'marmota-monax', name:'Groundhog', scientific:'Marmota monax', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
   { id:'marmot-unspecified', taxonId:'marmota', name:'Marmot — species unknown', scientific:'Marmota', rank:'genus', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
-  { id:'southern-flying', taxonId:'glaucomys-volans', name:'Southern flying squirrel', scientific:'Glaucomys volans', rank:'species', identification:'exact', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
-  { id:'flying-unspecified', taxonId:'glaucomys', name:'Flying squirrel — species unknown', scientific:'Glaucomys', rank:'genus', identification:'broad', image:'https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
+  { id:'southern-flying', taxonId:'glaucomys-volans', name:'Southern flying squirrel', scientific:'Glaucomys volans', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
+  { id:'flying-unspecified', taxonId:'glaucomys', name:'Flying squirrel — species unknown', scientific:'Glaucomys', rank:'genus', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg/500px-Southern_Flying_Squirrel_-_Glaucomys_volans%2C_Arlington%2C_Virginia%2C_December_22%2C_2020_%2853406816432%29.jpg' },
   { id:'tree-squirrel-unspecified', taxonId:'tree-squirrels', name:'Tree squirrel — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' },
   { id:'other-sciurid', taxonId:'sciuridae', name:'Other squirrel-family animal', scientific:'Sciuridae', rank:'family', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' }
 ];
+const FALLBACK_TAXON_IMAGE = TAXA[0].image;
 
 const TAXON_BY_ID = new Map(TAXA.map(taxon => [taxon.id, taxon]));
 
@@ -126,7 +127,7 @@ function migrateSighting(item, legacySpecies=[]) {
   const custom = { ...item, classificationId:'legacy:' + normalizeLabel(label).replace(/[^a-z0-9]+/g,'-'), taxonId:'sciuridae', taxonRank:'unclassified', commonName:label, scientificName:null, traits:[], identification:'broad', taxonomyVersion:TAXONOMY_VERSION, legacyLabel:label };
   return { item:custom, changed:true };
 }
-function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtml(taxon.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer">'; }
+function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtml(taxon.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escapeHtml(FALLBACK_TAXON_IMAGE) + '\'">'; }
 function scientificLine(taxon) { return taxon.scientific ? '<em>' + escapeHtml(taxon.scientific) + '</em>' : 'Broad identification'; }
 
 function filteredFeedSightings() {
@@ -579,6 +580,10 @@ function renderHome() {
   $('todayLabel').textContent = new Intl.DateTimeFormat(undefined, { weekday:'long', month:'long', day:'numeric' }).format(new Date()).toUpperCase();
   $('todayCount').textContent = count;
   $('dailyPrompt').textContent = count ? (count > 4 ? 'A banner day for squirrels.' : 'The count is officially underway.') : 'Keep your eyes on the trees.';
+  $('primaryImage').onerror = () => {
+    $('primaryImage').onerror = null;
+    $('primaryImage').src = FALLBACK_TAXON_IMAGE;
+  };
   $('primaryImage').src = primary.image;
   $('primaryImage').alt = primary.name;
   $('primaryName').textContent = primary.name;
