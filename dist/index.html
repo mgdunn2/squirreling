@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#173f2a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Squirreling">
+  <meta name="description" content="A private, local-first squirrel sighting log.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+  <title>Squirreling</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="todayLabel">TODAY</p>
+        <h1>Squirreling<span class="title-dot">.</span></h1>
+      </div>
+      <button class="icon-button" id="settingsButton" aria-label="Open settings">⚙</button>
+    </header>
+
+    <main>
+      <section class="view active" id="homeView" aria-labelledby="homeTab">
+        <div class="hero-copy">
+          <p id="dailyPrompt">Keep your eyes on the trees.</p>
+          <div class="today-count"><strong id="todayCount">0</strong><span>spotted today</span></div>
+        </div>
+
+        <button class="spot-button" id="primarySpotButton">
+          <span class="spot-glow"></span>
+          <span class="spot-emoji" id="primaryEmoji">🐿️</span>
+          <strong id="primaryName">Tree squirrel</strong>
+          <small>Tap to spot</small>
+        </button>
+
+        <div class="camera-row">
+          <button class="camera-button" id="cameraButton"><span>📷</span> Photo sighting</button>
+          <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
+        </div>
+
+        <section class="quick-section">
+          <div class="section-heading">
+            <h2>Other squirrels</h2>
+            <button class="text-button" id="customizeButton">Customize</button>
+          </div>
+          <div class="quick-grid" id="quickGrid"></div>
+        </section>
+
+        <article class="last-card hidden" id="lastCard">
+          <div class="last-thumb" id="lastThumb">📍</div>
+          <div>
+            <p class="eyebrow">LATEST SIGHTING</p>
+            <strong id="lastName"></strong>
+            <span id="lastMeta"></span>
+          </div>
+        </article>
+      </section>
+
+      <section class="view" id="calendarView" aria-labelledby="calendarTab">
+        <div class="view-title"><p class="eyebrow">FIELD LOG</p><h2>Calendar</h2></div>
+        <div class="month-controls">
+          <button class="icon-button" id="prevMonth" aria-label="Previous month">←</button>
+          <strong id="monthLabel"></strong>
+          <button class="icon-button" id="nextMonth" aria-label="Next month">→</button>
+        </div>
+        <div class="weekday-row"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="day-log">
+          <div class="section-heading"><h2 id="selectedDayLabel">Sightings</h2><span id="selectedDayCount"></span></div>
+          <div class="sighting-list" id="daySightings"></div>
+        </div>
+      </section>
+
+      <section class="view" id="mapView" aria-labelledby="mapTab">
+        <div class="view-title"><p class="eyebrow">YOUR RANGE</p><h2>Squirrel map</h2></div>
+        <div class="map-card">
+          <div id="map" aria-label="Map of squirrel sightings"></div>
+          <div class="map-empty" id="mapEmpty"><span>📍</span><strong>No mapped squirrels yet</strong><p>Your next GPS-tagged sighting will appear here.</p></div>
+        </div>
+        <p class="map-note">Map tiles require internet. Your sightings and coordinates stay on this device.</p>
+      </section>
+
+      <section class="view" id="historyView" aria-labelledby="historyTab">
+        <div class="view-title"><p class="eyebrow">THE TALLY</p><h2>All sightings</h2></div>
+        <div class="stats-grid">
+          <div><strong id="totalCount">0</strong><span>Total</span></div>
+          <div><strong id="speciesCount">0</strong><span>Types</span></div>
+          <div><strong id="streakCount">0</strong><span>Day streak</span></div>
+        </div>
+        <div class="sighting-list full-list" id="allSightings"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-item active" id="homeTab" data-view="homeView"><span>⌂</span>Spot</button>
+      <button class="nav-item" id="calendarTab" data-view="calendarView"><span>▦</span>Calendar</button>
+      <button class="nav-item" id="mapTab" data-view="mapView"><span>⌖</span>Map</button>
+      <button class="nav-item" id="historyTab" data-view="historyView"><span>☰</span>Log</button>
+    </nav>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-header"><div><p class="eyebrow">MAKE IT YOURS</p><h2>Squirrel setup</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <p class="dialog-intro">Choose the main spotting button and the smaller shortcuts shown at home.</p>
+      <div class="species-editor" id="speciesEditor"></div>
+      <button type="button" class="add-species" id="addSpeciesButton">＋ Add a squirrel type</button>
+      <div class="settings-section">
+        <h3>Location</h3>
+        <label class="toggle-row"><span><strong>Record GPS</strong><small>Ask for your location when you log a sighting.</small></span><input type="checkbox" id="gpsToggle"><i></i></label>
+      </div>
+      <div class="settings-section">
+        <h3>Backup</h3>
+        <div class="backup-actions">
+          <button type="button" class="secondary-button" id="exportButton">Export data</button>
+          <button type="button" class="secondary-button" id="importButton">Import data</button>
+          <input type="file" id="importInput" accept="application/json" hidden>
+        </div>
+        <small class="helper">Export occasionally—browser data can be lost if site storage is cleared.</small>
+      </div>
+      <button class="save-button" value="default" id="saveSettingsButton">Save changes</button>
+    </form>
+  </dialog>
+
+  <dialog id="addSpeciesDialog">
+    <form method="dialog" class="dialog-card compact">
+      <div class="dialog-header"><h2>Add a squirrel</h2><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <label class="field-label">Name<input id="newSpeciesName" maxlength="32" placeholder="e.g. Prairie dog"></label>
+      <label class="field-label">Emoji<input id="newSpeciesEmoji" maxlength="4" value="🐿️"></label>
+      <button class="save-button" value="default" id="confirmSpeciesButton">Add squirrel</button>
+    </form>
+  </dialog>
+
+  <dialog id="detailDialog">
+    <div class="dialog-card compact" id="detailContent"></div>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
