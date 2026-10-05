@@ -99,6 +99,10 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 29px; line-height: 1; le
 .stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 20px; }
 .feed-filter-label { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: -14px 0 13px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .feed-filter { min-width: 135px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+.filter-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin: 0 0 15px; }
+.filter-grid.two-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.filter-grid label { min-width: 0; color: var(--muted); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .07em; }
+.filter-grid select { width: 100%; margin-top: 4px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 10px; text-transform: none; letter-spacing: 0; }
 .map-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -14px 0 13px; }
 .map-controls .feed-filter-label { margin: 0; }
 .map-scope-button { padding: 8px 10px; white-space: nowrap; }
@@ -164,7 +168,8 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .secondary-button { padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f4f0e5; font-size: 11px; font-weight: 800; cursor: pointer; }
 .save-button { width: 100%; margin-top: 20px; padding: 13px; border: 0; border-radius: 14px; background: var(--forest); color: white; font-weight: 800; cursor: pointer; }
 .field-label { display: block; margin: 15px 0; font-size: 11px; font-weight: 800; }
-.field-label input, .field-label select { width: 100%; margin-top: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #faf7ef; color: var(--ink); }
+.field-label input, .field-label select, .field-label textarea { width: 100%; margin-top: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #faf7ef; color: var(--ink); }
+.field-label textarea { resize: vertical; min-height: 110px; line-height: 1.45; }
 .field-label .optional { color: var(--muted); font-weight: 500; }
 .photo-preview { height: 150px; margin: 4px 0 12px; border-radius: 15px; overflow: hidden; background: #f0ecdf; }
 .photo-preview.hidden { display: none; }
@@ -191,6 +196,10 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .add-location-button { width: 100%; margin: 0 0 12px; }
 .danger-button { padding: 11px; border: 1px solid #d8a594; border-radius: 12px; background: #fff2ed; color: #953a1b; font-size: 11px; font-weight: 800; cursor: pointer; }
+.history-group { margin: 0 0 20px; }
+.history-group h3 { margin: 0 2px 9px; color: var(--forest-2); font-family: Georgia, serif; font-size: 17px; }
+.history-group .sighting-list { gap: 7px; }
+.sighting-note { margin: 12px 0; padding: 12px; border-radius: 12px; background: #f4f0e5; color: var(--ink); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 621px) { body { padding: 20px 0; } .app-shell { min-height: calc(100dvh - 40px); border-radius: 28px; box-shadow: var(--shadow); } .bottom-nav { bottom: 20px; border-radius: 0 0 28px 28px; } }
 @media (max-height: 700px) { .spot-button { width: min(54vw, 230px); } .spot-button strong { font-size: 18px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

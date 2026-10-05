@@ -63,6 +63,9 @@ let friendUnsubscribers = [];
 let unsubscribeFriends = null;
 let unsubscribeRequests = null;
 let feedFilter = 'mine';
+let timeFilter = 'all';
+let speciesFilter = 'all';
+let historyGroup = 'none';
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -140,6 +143,15 @@ function filteredFeedSightings() {
   return sightings;
 }
 
+function filteredSightings() {
+  const now=Date.now();
+  const cutoffs={ week:now-(7*86400000), month:now-(30*86400000), year:new Date(new Date().getFullYear(),0,1).getTime() };
+  return filteredFeedSightings().filter(item => {
+    if (timeFilter !== 'all' && Number(item.timestamp) < cutoffs[timeFilter]) return false;
+    return speciesFilter === 'all' || (item.classificationId || item.speciesId) === speciesFilter;
+  });
+}
+
 function renderFeedFilters() {
   const options = [
     ['mine','My sightings'],
@@ -151,6 +163,27 @@ function renderFeedFilters() {
   const html=options.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===feedFilter?'selected':''}>${escapeHtml(label)}</option>`).join('');
   $('mapFeedFilter').innerHTML=html;
   $('historyFeedFilter').innerHTML=html;
+}
+
+function renderDataFilters() {
+  const timeOptions=[['all','All time'],['week','Last 7 days'],['month','Last 30 days'],['year','This year']];
+  const timeHtml=timeOptions.map(([value,label])=>`<option value="${value}" ${value===timeFilter?'selected':''}>${label}</option>`).join('');
+  $('mapTimeFilter').innerHTML=timeHtml;
+  $('historyTimeFilter').innerHTML=timeHtml;
+  const speciesOptions=[['all','All species'],...TAXA.map(taxon=>[taxon.id,taxon.name])];
+  const speciesHtml=speciesOptions.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===speciesFilter?'selected':''}>${escapeHtml(label)}</option>`).join('');
+  $('mapSpeciesFilter').innerHTML=speciesHtml;
+  $('historySpeciesFilter').innerHTML=speciesHtml;
+  $('historyGroupFilter').value=historyGroup;
+}
+
+function setDataFilter(type,value) {
+  if (type === 'time') timeFilter=value;
+  if (type === 'species') speciesFilter=value;
+  mapScope='recent';
+  renderDataFilters();
+  renderHistory();
+  if ($('mapView').classList.contains('active')) renderMap();
 }
 
 function setFeedFilter(value) {
@@ -230,6 +263,8 @@ function bindEvents() {
   $('primarySpotButton').addEventListener('click', () => recordSighting(settings.primaryId));
   $('cameraButton').addEventListener('click', () => $('cameraInput').click());
   $('cameraInput').addEventListener('change', handlePhoto);
+  $('noteSightingButton').addEventListener('click', openNoteSighting);
+  $('noteSightingForm').addEventListener('submit', saveNoteSighting);
   $('pastSightingButton').addEventListener('click', openPastSighting);
   $('pastPhotoInput').addEventListener('change', handlePastPhoto);
   $('pastSightingForm').addEventListener('submit', savePastSighting);
@@ -259,6 +294,11 @@ function bindEvents() {
   });
   $('mapFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
   $('historyFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
+  $('mapTimeFilter').addEventListener('change', e => setDataFilter('time',e.target.value));
+  $('historyTimeFilter').addEventListener('change', e => setDataFilter('time',e.target.value));
+  $('mapSpeciesFilter').addEventListener('change', e => setDataFilter('species',e.target.value));
+  $('historySpeciesFilter').addEventListener('change', e => setDataFilter('species',e.target.value));
+  $('historyGroupFilter').addEventListener('change', e => { historyGroup=e.target.value; renderHistory(); });
 }
 
 function switchView(viewId) {
@@ -273,9 +313,9 @@ function switchView(viewId) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function recordSighting(speciesId, photo = null) {
+async function recordSighting(speciesId, photo = null, notes = '') {
   const now = Date.now();
-  const item = applyClassification({ id:crypto.randomUUID(), timestamp:now, latitude:null, longitude:null, accuracy:null, photo, ownerUid:currentUser?.uid || null, updatedAt:now }, speciesId);
+  const item = applyClassification({ id:crypto.randomUUID(), timestamp:now, latitude:null, longitude:null, accuracy:null, photo, notes:notes.trim(), ownerUid:currentUser?.uid || null, updatedAt:now }, speciesId);
   await putSighting(item);
   sightings.unshift(item);
   renderAll();
@@ -297,6 +337,22 @@ async function recordSighting(speciesId, photo = null) {
       if (error.code === 1) showToast('Location wasn’t allowed—sighting still saved');
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
+}
+
+function openNoteSighting() {
+  $('noteSpecies').innerHTML=taxonomyOptions(settings.primaryId);
+  $('noteSpecies').value=settings.primaryId;
+  $('sightingNotes').value='';
+  $('noteSightingDialog').showModal();
+  setTimeout(()=>$('sightingNotes').focus(),50);
+}
+
+async function saveNoteSighting(event) {
+  event.preventDefault();
+  const notes=$('sightingNotes').value.trim();
+  if (!notes) { showToast('Add a note first'); return; }
+  $('noteSightingDialog').close();
+  await recordSighting($('noteSpecies').value,null,notes);
 }
 
 function localDateTimeValue(date = new Date()) {
@@ -589,6 +645,7 @@ function renderAll() {
   renderCalendar();
   renderHistory();
   renderFeedFilters();
+  renderDataFilters();
   if ($('mapView').classList.contains('active')) renderMap();
 }
 
@@ -647,11 +704,34 @@ function changeMonth(delta) {
 }
 
 function renderHistory() {
-  const visible = filteredFeedSightings();
+  const visible = filteredSightings();
   $('totalCount').textContent = visible.length;
   $('speciesCount').textContent = new Set(visible.map(s=>s.taxonId || s.speciesId)).size;
   $('streakCount').textContent = calculateStreak(visible);
-  renderList($('allSightings'), visible, 'No sightings match this filter.', true);
+  renderGroupedHistory(visible);
+}
+
+function historyGroupKey(item) {
+  if (historyGroup === 'day') return { key:dateKey(item.timestamp), label:fmtDay.format(item.timestamp) };
+  if (historyGroup === 'species') { const species=displaySpecies(item); return { key:species.id, label:species.name }; }
+  if (historyGroup === 'person') return item.friendUid
+    ? { key:`friend:${item.friendUid}`, label:item.ownerName || 'Friend' }
+    : { key:'me', label:'Me' };
+  return { key:'all', label:'' };
+}
+
+function renderGroupedHistory(items) {
+  const container=$('allSightings');
+  if (historyGroup === 'none') { renderList(container,items,'No sightings match these filters.',true); return; }
+  if (!items.length) { container.innerHTML='<div class="empty-state">No sightings match these filters.</div>'; return; }
+  const groups=new Map();
+  items.forEach(item => {
+    const group=historyGroupKey(item);
+    if (!groups.has(group.key)) groups.set(group.key,{ label:group.label, items:[] });
+    groups.get(group.key).items.push(item);
+  });
+  container.innerHTML=[...groups.entries()].map(([key,group])=>`<section class="history-group"><h3>${escapeHtml(group.label)} · ${group.items.length}</h3><div class="sighting-list" data-group="${escapeHtml(key)}"></div></section>`).join('');
+  [...groups.entries()].forEach(([key,group])=>renderList(container.querySelector(`[data-group="${CSS.escape(key)}"]`),group.items,'',historyGroup!=='day'));
 }
 
 function calculateStreak(items=sightings) {
@@ -667,7 +747,7 @@ function renderList(container, items, empty, showDate=false) {
   container.innerHTML = items.map(s => {
     const sp = displaySpecies(s);
     const owner = s.friendUid ? `${escapeHtml(s.ownerName || 'Friend')} · ` : '';
-    return `<button class="sighting-row" data-id="${s.id}" data-friend="${escapeHtml(s.friendUid || '')}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:taxonImage(sp)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${owner}${sp.scientific?`<i>${escapeHtml(sp.scientific)}</i> · `:''}${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
+    return `<button class="sighting-row" data-id="${s.id}" data-friend="${escapeHtml(s.friendUid || '')}"><span class="sighting-icon">${s.photo?`<img src="${s.photo}" alt="">`:taxonImage(sp)}</span><span><strong>${escapeHtml(sp.name)}</strong><span>${owner}${sp.scientific?`<i>${escapeHtml(sp.scientific)}</i> · `:''}${s.latitude?'📍 GPS saved':'No location'}${s.photo?' · Photo':''}${s.notes?' · Note':''}</span></span><time>${showDate?fmtDay.format(s.timestamp):fmtTime.format(s.timestamp)}</time></button>`;
   }).join('');
   container.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => b.dataset.friend ? showFriendDetail(b.dataset.id, b.dataset.friend) : showDetail(b.dataset.id)));
 }
@@ -675,7 +755,7 @@ function renderList(container, items, empty, showDate=false) {
 function showDetail(id) {
   const item = sightings.find(s => s.id === id); if (!item) return;
   const sp = displaySpecies(item);
-  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:`<div class="detail-taxon-photo">${taxonImage(sp)}</div>`}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em>${item.traits?.length?` · ${escapeHtml(item.traits.join(', '))}`:''}</p>`:''}</div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}${item.accuracy?` · ±${item.accuracy}m`:''}`:'No GPS coordinates'}</p><button class="secondary-button refine-button" id="refineSighting">Refine identification</button>${Number.isFinite(item.latitude)?'':`<button class="secondary-button add-location-button" id="addLocationToSighting">📍 Choose location on map</button>`}<div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
+  $('detailContent').innerHTML = `${item.photo?`<img class="detail-photo" src="${item.photo}" alt="Squirrel sighting">`:`<div class="detail-taxon-photo">${taxonImage(sp)}</div>`}<div class="dialog-header"><div><p class="eyebrow">SIGHTING</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em>${item.traits?.length?` · ${escapeHtml(item.traits.join(', '))}`:''}</p>`:''}</div><button class="close-button" id="closeDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}${item.accuracy?` · ±${item.accuracy}m`:''}`:'No GPS coordinates'}</p>${item.notes?`<p class="sighting-note">${escapeHtml(item.notes)}</p>`:''}<button class="secondary-button refine-button" id="refineSighting">Refine identification</button>${Number.isFinite(item.latitude)?'':`<button class="secondary-button add-location-button" id="addLocationToSighting">📍 Choose location on map</button>`}<div class="detail-actions"><button class="secondary-button" id="closeDetail2">Done</button><button class="danger-button" id="deleteSighting">Delete sighting</button></div>`;
   $('detailDialog').showModal();
   $('closeDetail').onclick = $('closeDetail2').onclick = () => $('detailDialog').close();
   if ($('addLocationToSighting')) $('addLocationToSighting').onclick = () => openLocationPicker(item.id);
@@ -691,7 +771,7 @@ function showDetail(id) {
 function showFriendDetail(id, friendUid) {
   const item = friendSightings.find(s => s.id === id && s.friendUid === friendUid); if (!item) return;
   const sp = displaySpecies(item);
-  $('detailContent').innerHTML = `<div class="detail-taxon-photo">${taxonImage(sp)}</div><div class="dialog-header"><div><p class="eyebrow">${escapeHtml((item.ownerName || 'FRIEND').toUpperCase())}</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em></p>`:''}</div><button class="close-button" id="closeFriendDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`:'No GPS coordinates'}<br>Photos remain private on their device.</p><button class="secondary-button" id="doneFriendDetail">Done</button>`;
+  $('detailContent').innerHTML = `<div class="detail-taxon-photo">${taxonImage(sp)}</div><div class="dialog-header"><div><p class="eyebrow">${escapeHtml((item.ownerName || 'FRIEND').toUpperCase())}</p><h2>${escapeHtml(sp.name)}</h2>${sp.scientific?`<p class="scientific-name"><em>${escapeHtml(sp.scientific)}</em></p>`:''}</div><button class="close-button" id="closeFriendDetail" aria-label="Close">×</button></div><p class="detail-meta">${new Date(item.timestamp).toLocaleString()}<br>${Number.isFinite(item.latitude)?`${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`:'No GPS coordinates'}<br>Photos remain private on their device.</p>${item.notes?`<p class="sighting-note">${escapeHtml(item.notes)}</p>`:''}<button class="secondary-button" id="doneFriendDetail">Done</button>`;
   $('detailDialog').showModal();
   $('closeFriendDetail').onclick = $('doneFriendDetail').onclick = () => $('detailDialog').close();
 }
@@ -743,7 +823,7 @@ function personPinIcon(color) {
 }
 
 function renderMap() {
-  const mapped = filteredFeedSightings().filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  const mapped = filteredSightings().filter(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
   const newestTimestamp = mapped.reduce((newest, sighting) => Math.max(newest, Number(sighting.timestamp) || 0), 0);
   const recentCutoff = newestTimestamp - (7 * 24 * 60 * 60 * 1000);
   const recent = mapped.filter(sighting => (Number(sighting.timestamp) || 0) >= recentCutoff);
@@ -764,7 +844,7 @@ function renderMap() {
   mapped.forEach(s => {
     const sp = displaySpecies(s);
     const person = people.get(s.friendUid || currentUser?.uid || 'me');
-    L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.name)}</strong>${sp.scientific?`<br><em>${escapeHtml(sp.scientific)}</em>`:''}<br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}`).addTo(markerLayer);
+    L.marker([s.latitude,s.longitude], { icon:personPinIcon(person.color) }).bindPopup(`<strong>${escapeHtml(sp.name)}</strong>${sp.scientific?`<br><em>${escapeHtml(sp.scientific)}</em>`:''}<br>${escapeHtml(person.name)}<br>${new Date(s.timestamp).toLocaleString()}${s.notes?`<br>${escapeHtml(s.notes)}`:''}`).addTo(markerLayer);
   });
   if (focusSightings.length === 1) map.setView([focusSightings[0].latitude,focusSightings[0].longitude], 15);
   if (focusSightings.length > 1) map.fitBounds(L.latLngBounds(focusSightings.map(s=>[s.latitude,s.longitude])), { padding:[28,28], maxZoom:15 });
