@@ -81,7 +81,7 @@
       <section class="view" id="mapView" aria-labelledby="mapTab">
         <div class="view-title"><p class="eyebrow">YOUR RANGE</p><h2>Squirrel map</h2></div>
         <div class="map-controls">
-          <label class="feed-filter-label">Show<select class="feed-filter" id="mapFeedFilter"></select></label>
+          <div class="feed-filter-label">People<div id="mapFeedFilter"></div></div>
           <button class="secondary-button map-scope-button" id="mapScopeButton" type="button" hidden>Show all sightings</button>
         </div>
         <div class="filter-grid two-filters">
@@ -98,7 +98,7 @@
 
       <section class="view" id="historyView" aria-labelledby="historyTab">
         <div class="view-title"><p class="eyebrow">THE TALLY</p><h2>All sightings</h2></div>
-        <label class="feed-filter-label">Show<select class="feed-filter" id="historyFeedFilter"></select></label>
+        <div class="feed-filter-label">People<div id="historyFeedFilter"></div></div>
         <div class="filter-grid">
           <label>Time<select id="historyTimeFilter"></select></label>
           <label>Species<select id="historySpeciesFilter"></select></label>
@@ -192,7 +192,7 @@
 
   <dialog id="noteSightingDialog">
     <form method="dialog" class="dialog-card compact" id="noteSightingForm">
-      <div class="dialog-header"><div><p class="eyebrow">FIELD NOTES</p><h2>Note a sighting</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+      <div class="dialog-header"><div><p class="eyebrow">FIELD NOTES</p><h2>Note a sighting</h2></div><button type="button" class="close-button" id="cancelNoteSighting" aria-label="Close">×</button></div>
       <p class="dialog-intro">Record a current sighting with a note. GPS is added according to your location setting.</p>
       <label class="field-label">Squirrel type<select id="noteSpecies" required></select></label>
       <label class="field-label">Notes<textarea id="sightingNotes" maxlength="500" rows="5" placeholder="What was the squirrel doing?" required></textarea></label>

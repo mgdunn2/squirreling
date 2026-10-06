@@ -62,7 +62,7 @@ let friendSightings = [];
 let friendUnsubscribers = [];
 let unsubscribeFriends = null;
 let unsubscribeRequests = null;
-let feedFilter = 'mine';
+let selectedPeople = new Set(['me']);
 let timeFilter = 'all';
 let speciesFilter = 'all';
 let historyGroup = 'none';
@@ -137,10 +137,7 @@ function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtm
 function scientificLine(taxon) { return taxon.scientific ? '<em>' + escapeHtml(taxon.scientific) + '</em>' : 'Broad identification'; }
 
 function filteredFeedSightings() {
-  if (feedFilter === 'friends') return [...friendSightings].sort((a,b)=>b.timestamp-a.timestamp);
-  if (feedFilter.startsWith('friend:')) return friendSightings.filter(s => s.friendUid === feedFilter.slice(7)).sort((a,b)=>b.timestamp-a.timestamp);
-  if (feedFilter === 'all') return [...sightings, ...friendSightings].sort((a,b)=>b.timestamp-a.timestamp);
-  return sightings;
+  return [...sightings.filter(() => selectedPeople.has('me')), ...friendSightings.filter(s => selectedPeople.has(s.friendUid))].sort((a,b)=>b.timestamp-a.timestamp);
 }
 
 function filteredSightings() {
@@ -153,16 +150,29 @@ function filteredSightings() {
 }
 
 function renderFeedFilters() {
-  const options = [
-    ['mine','My sightings'],
-    ['friends','All friends'],
-    ...friends.map(f => [`friend:${f.uid}`, f.name || f.email || 'Friend']),
-    ['all','Me + friends']
-  ];
-  if (!options.some(([value]) => value === feedFilter)) feedFilter='mine';
-  const html=options.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===feedFilter?'selected':''}>${escapeHtml(label)}</option>`).join('');
-  $('mapFeedFilter').innerHTML=html;
-  $('historyFeedFilter').innerHTML=html;
+  const options = [['me','Me'], ...friends.map(f => [f.uid, f.name || f.email || 'Friend'])];
+  const count=options.filter(([id])=>selectedPeople.has(id)).length;
+  const label=count===0?'Nobody':count===options.length&&count>1?'Everyone':count===1?options.find(([id])=>selectedPeople.has(id))[1]:`${count} people`;
+  ['mapFeedFilter','historyFeedFilter'].forEach(id => {
+    const root=$(id);
+    const open=root.querySelector('details')?.open || false;
+    root.innerHTML=`<details class="people-dropdown" ${open?'open':''}><summary>${escapeHtml(label)}</summary><div class="people-menu"><div class="people-actions"><button type="button" data-people="all">All</button><button type="button" data-people="none">None</button></div>${options.map(([value,name])=>`<label><input type="checkbox" value="${escapeHtml(value)}" ${selectedPeople.has(value)?'checked':''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></details>`;
+    root.querySelectorAll('input').forEach(input=>input.addEventListener('change',()=>{
+      if(input.checked) selectedPeople.add(input.value); else selectedPeople.delete(input.value);
+      refreshPeopleFilter();
+    }));
+    root.querySelectorAll('[data-people]').forEach(button=>button.addEventListener('click',()=>{
+      selectedPeople=new Set(button.dataset.people==='all'?options.map(([id])=>id):[]);
+      refreshPeopleFilter();
+    }));
+  });
+}
+
+function refreshPeopleFilter() {
+  mapScope='recent';
+  renderFeedFilters();
+  renderHistory();
+  if ($('mapView').classList.contains('active')) renderMap();
 }
 
 function renderDataFilters() {
@@ -186,13 +196,6 @@ function setDataFilter(type,value) {
   if ($('mapView').classList.contains('active')) renderMap();
 }
 
-function setFeedFilter(value) {
-  feedFilter=value;
-  mapScope='recent';
-  renderFeedFilters();
-  renderHistory();
-  if ($('mapView').classList.contains('active')) renderMap();
-}
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -292,8 +295,10 @@ function bindEvents() {
     mapScope = mapScope === 'recent' ? 'all' : 'recent';
     renderMap();
   });
-  $('mapFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
-  $('historyFeedFilter').addEventListener('change', e => setFeedFilter(e.target.value));
+  $('cancelNoteSighting').addEventListener('click', () => $('noteSightingDialog').close());
+  document.addEventListener('click', event => {
+    document.querySelectorAll('.people-dropdown[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open=false; });
+  });
   $('mapTimeFilter').addEventListener('change', e => setDataFilter('time',e.target.value));
   $('historyTimeFilter').addEventListener('change', e => setDataFilter('time',e.target.value));
   $('mapSpeciesFilter').addEventListener('change', e => setDataFilter('species',e.target.value));
