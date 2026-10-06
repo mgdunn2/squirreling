@@ -2,6 +2,7 @@ const DB_NAME = 'squirreling-db';
 const DB_VERSION = 2;
 const SETTINGS_KEY = 'squirreling-settings-v1';
 const PENDING_DELETES_KEY = 'squirreling-pending-deletes-v1';
+const FRIENDS_CACHE_KEY = 'squirreling-friends-cache-v1';
 const TAXONOMY_VERSION = 2;
 
 const TAXA = [
@@ -64,6 +65,10 @@ let friendSightings = [];
 let friendUnsubscribers = [];
 let unsubscribeFriends = null;
 let unsubscribeRequests = null;
+let socialRetryTimer = null;
+let socialRetryAttempt = 0;
+let socialSession = 0;
+let friendsLoaded = false;
 let selectedPeople = new Set(['me']);
 let timeFilter = 'all';
 let speciesFilter = 'all';
@@ -335,6 +340,9 @@ function bindEvents() {
     renderMap();
   });
   $('cancelNoteSighting').addEventListener('click', () => $('noteSightingDialog').close());
+  window.addEventListener('online', () => {
+    if (currentUser && socialRetryTimer) restartSocialSync(currentUser);
+  });
   document.addEventListener('click', event => {
     document.querySelectorAll('.people-dropdown[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open=false; });
   });
@@ -1033,7 +1041,7 @@ async function importData(event) {
   event.target.value='';
 }
 
-function initFirebase() {
+async function initFirebase() {
   if (!window.firebase || !window.SQUIRRELING_FIREBASE_CONFIG) {
     renderAccount('Cloud sync is unavailable; local mode still works.');
     return;
@@ -1042,12 +1050,26 @@ function initFirebase() {
     if (!firebase.apps.length) firebase.initializeApp(window.SQUIRRELING_FIREBASE_CONFIG);
     firebaseAuth = firebase.auth();
     cloudDb = firebase.firestore();
-    firebaseAuth.onAuthStateChanged(async user => {
+    try {
+      await cloudDb.enablePersistence({ synchronizeTabs:true });
+    } catch (error) {
+      if (!['failed-precondition','unimplemented'].includes(error?.code)) {
+        renderAccount('Cloud cache is unavailable; live sync will still work.');
+      }
+    }
+    firebaseAuth.onAuthStateChanged(user => {
+      const previousUid=currentUser?.uid || null;
+      const session=++socialSession;
       currentUser = user;
       if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
-      stopSocialListeners();
+      stopSocialListeners({ clear:!user || Boolean(previousUid && previousUid!==user.uid), cancelRetry:true });
+      if (user && !friendsLoaded) loadCachedFriends(user.uid);
       renderAccount();
-      if (user) await startAccountSync(user);
+      renderFriends(); renderFeedFilters(); renderHistory();
+      if (user) {
+        startSocialSync(user,session);
+        startAccountSync(user);
+      }
     });
   } catch {
     renderAccount('Cloud sync could not start; local mode still works.');
@@ -1144,7 +1166,6 @@ async function startAccountSync(user) {
       }
       renderAccount('All account sightings synced.');
     }, () => renderAccount('Offline — account changes will sync later.'));
-    await startSocialSync(user);
   } catch {
     renderAccount('Offline — using sightings stored on this device.');
   }
@@ -1156,34 +1177,107 @@ async function emailHash(email) {
   return [...new Uint8Array(bytes)].map(value=>value.toString(16).padStart(2,'0')).join('');
 }
 
-async function startSocialSync(user) {
-  const hash=await emailHash(user.email || '');
-  await cloudDb.collection('emailDirectory').doc(hash).set({ uid:user.uid, name:user.displayName || user.email, email:user.email, updatedAt:Date.now() });
-  unsubscribeRequests=cloudDb.collection('friendRequests').where('recipientUid','==',user.uid).onSnapshot(snapshot => {
-    friendRequests=snapshot.docs.map(doc=>({ id:doc.id, ...doc.data() })).filter(request=>request.status==='pending');
-    renderFriends();
-  });
-  unsubscribeFriends=cloudDb.collection('users').doc(user.uid).collection('friends').onSnapshot(snapshot => {
-    friends=snapshot.docs.map(doc=>({ uid:doc.id, ...doc.data() }));
-    startFriendSightingListeners();
-    renderFriends(); renderFeedFilters(); renderHistory();
-  });
+function setFriendsSyncStatus(message='') {
+  const status=$('friendsSyncStatus');
+  if (!status) return;
+  status.textContent=message;
+  status.classList.toggle('hidden',!message);
 }
 
-function stopSocialListeners() {
+function isCurrentSocialSession(user,session) {
+  return currentUser?.uid===user.uid && socialSession===session;
+}
+
+function loadCachedFriends(uid) {
+  try {
+    const cached=JSON.parse(localStorage.getItem(FRIENDS_CACHE_KEY));
+    if (cached?.uid!==uid || !Array.isArray(cached.friends)) return;
+    friends=cached.friends.filter(friend=>friend && typeof friend.uid==='string').map(friend=>({ uid:friend.uid, name:friend.name || '', email:friend.email || '' }));
+    friendsLoaded=true;
+  } catch {}
+}
+
+function cacheFriends(uid) {
+  try {
+    localStorage.setItem(FRIENDS_CACHE_KEY,JSON.stringify({ uid, friends:friends.map(({uid,name,email})=>({uid,name,email})) }));
+  } catch {}
+}
+
+function startSocialSync(user, session=socialSession) {
+  if (!isCurrentSocialSession(user,session)) return;
+  setFriendsSyncStatus(friendsLoaded ? '' : 'Loading friends…');
+  unsubscribeRequests=cloudDb.collection('friendRequests').where('recipientUid','==',user.uid).onSnapshot(snapshot => {
+    if (!isCurrentSocialSession(user,session)) return;
+    friendRequests=snapshot.docs.map(doc=>({ id:doc.id, ...doc.data() })).filter(request=>request.status==='pending');
+    renderFriends();
+  }, error => handleSocialError(user,session,error));
+  unsubscribeFriends=cloudDb.collection('users').doc(user.uid).collection('friends').onSnapshot({ includeMetadataChanges:true }, snapshot => {
+    if (!isCurrentSocialSession(user,session)) return;
+    if (snapshot.empty && snapshot.metadata.fromCache && friendsLoaded && friends.length) {
+      setFriendsSyncStatus('Showing saved friends while reconnecting…');
+      return;
+    }
+    friends=snapshot.docs.map(doc=>({ uid:doc.id, ...doc.data() }));
+    friendsLoaded=true;
+    cacheFriends(user.uid);
+    socialRetryAttempt=0;
+    setFriendsSyncStatus('');
+    startFriendSightingListeners(user,session);
+    renderFriends(); renderFeedFilters(); renderHistory();
+  }, error => handleSocialError(user,session,error));
+
+  // Keeping the email directory current should never block loading the friend roster.
+  emailHash(user.email || '').then(hash => {
+    if (!isCurrentSocialSession(user,session)) return;
+    return cloudDb.collection('emailDirectory').doc(hash).set({ uid:user.uid, name:user.displayName || user.email, email:user.email, updatedAt:Date.now() });
+  }).catch(() => {});
+}
+
+function handleSocialError(user,session,error) {
+  if (!isCurrentSocialSession(user,session)) return;
+  setFriendsSyncStatus('Friends are temporarily unavailable. Retrying…');
+  scheduleSocialRetry(user);
+}
+
+function scheduleSocialRetry(user) {
+  if (currentUser?.uid!==user.uid || socialRetryTimer) return;
+  const delay=Math.min(30000,2000*(2**socialRetryAttempt++));
+  socialRetryTimer=setTimeout(()=>restartSocialSync(user),delay);
+}
+
+function restartSocialSync(user) {
+  if (currentUser?.uid!==user.uid) return;
+  if (socialRetryTimer) clearTimeout(socialRetryTimer);
+  socialRetryTimer=null;
+  stopSocialListeners({ clear:false, cancelRetry:false });
+  const session=++socialSession;
+  startSocialSync(user,session);
+}
+
+function stopSocialListeners({ clear=false, cancelRetry=false }={}) {
   if (unsubscribeFriends) unsubscribeFriends();
   if (unsubscribeRequests) unsubscribeRequests();
   friendUnsubscribers.forEach(unsubscribe=>unsubscribe());
   unsubscribeFriends=unsubscribeRequests=null;
-  friendUnsubscribers=[]; friends=[]; friendRequests=[]; friendSightings=[];
-  renderFriends();
+  friendUnsubscribers=[];
+  if (cancelRetry && socialRetryTimer) clearTimeout(socialRetryTimer);
+  if (cancelRetry) socialRetryTimer=null;
+  if (clear) {
+    friends=[]; friendRequests=[]; friendSightings=[]; friendsLoaded=false;
+    selectedPeople=new Set(['me']);
+    setFriendsSyncStatus('');
+    renderFriends(); renderFeedFilters(); renderHistory();
+  }
 }
 
-function startFriendSightingListeners() {
+function startFriendSightingListeners(user,session) {
   friendUnsubscribers.forEach(unsubscribe=>unsubscribe());
-  friendUnsubscribers=[]; friendSightings=[];
+  friendUnsubscribers=[];
+  const currentFriendIds=new Set(friends.map(friend=>friend.uid));
+  friendSightings=friendSightings.filter(s=>currentFriendIds.has(s.friendUid));
   friends.forEach(friend => {
     const unsubscribe=cloudDb.collection('users').doc(friend.uid).collection('sightings').onSnapshot(snapshot => {
+      if (!isCurrentSocialSession(user,session)) return;
       friendSightings=friendSightings.filter(s=>s.friendUid!==friend.uid);
       snapshot.docs.forEach(doc=>{
         const migrated=migrateSighting({ ...doc.data(), id:doc.id });
@@ -1191,7 +1285,7 @@ function startFriendSightingListeners() {
       });
       renderHistory(); renderFeedFilters();
       if ($('mapView').classList.contains('active')) renderMap();
-    });
+    }, error => handleSocialError(user,session,error));
     friendUnsubscribers.push(unsubscribe);
   });
 }
@@ -1231,7 +1325,7 @@ function renderFriends() {
   if (!$('friendsList')) return;
   $('requestsBlock').classList.toggle('hidden', !friendRequests.length);
   $('friendRequests').innerHTML=friendRequests.map(request=>`<div class="friend-row"><span><strong>${escapeHtml(request.senderName || request.senderEmail)}</strong><br>${escapeHtml(request.senderEmail || '')}</span><button class="secondary-button" data-accept="${escapeHtml(request.id)}">Accept</button><button class="secondary-button" data-reject="${escapeHtml(request.id)}">Decline</button></div>`).join('');
-  $('friendsList').innerHTML=friends.length?friends.map(friend=>`<div class="friend-row"><span><strong>${escapeHtml(friend.name || friend.email || 'Friend')}</strong><br>${escapeHtml(friend.email || '')}</span></div>`).join(''):'<small class="helper">No squirrel friends yet.</small>';
+  $('friendsList').innerHTML=friends.length?friends.map(friend=>`<div class="friend-row"><span><strong>${escapeHtml(friend.name || friend.email || 'Friend')}</strong><br>${escapeHtml(friend.email || '')}</span></div>`).join(''):`<small class="helper">${currentUser&&!friendsLoaded?'Loading friends…':'No squirrel friends yet.'}</small>`;
   $('friendRequests').querySelectorAll('[data-accept]').forEach(button=>button.onclick=()=>acceptFriendRequest(button.dataset.accept));
   $('friendRequests').querySelectorAll('[data-reject]').forEach(button=>button.onclick=()=>rejectFriendRequest(button.dataset.reject));
 }
