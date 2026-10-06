@@ -156,15 +156,17 @@ function renderFeedFilters() {
   ['mapFeedFilter','historyFeedFilter'].forEach(id => {
     const root=$(id);
     const open=root.querySelector('details')?.open || false;
-    root.innerHTML=`<details class="people-dropdown" ${open?'open':''}><summary>${escapeHtml(label)}</summary><div class="people-menu"><div class="people-actions"><button type="button" data-people="all">All</button><button type="button" data-people="none">None</button></div>${options.map(([value,name])=>`<label><input type="checkbox" value="${escapeHtml(value)}" ${selectedPeople.has(value)?'checked':''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></details>`;
-    root.querySelectorAll('input').forEach(input=>input.addEventListener('change',()=>{
+    root.innerHTML=`<details class="people-dropdown" ${open?'open':''}><summary>${escapeHtml(label)}</summary><div class="people-menu"><label class="people-all"><input type="checkbox" data-people="all" ${count===options.length?'checked':''}><span>All</span></label>${options.map(([value,name])=>`<label><input type="checkbox" value="${escapeHtml(value)}" ${selectedPeople.has(value)?'checked':''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></details>`;
+    root.querySelectorAll('input:not([data-people])').forEach(input=>input.addEventListener('change',()=>{
       if(input.checked) selectedPeople.add(input.value); else selectedPeople.delete(input.value);
       refreshPeopleFilter();
     }));
-    root.querySelectorAll('[data-people]').forEach(button=>button.addEventListener('click',()=>{
-      selectedPeople=new Set(button.dataset.people==='all'?options.map(([id])=>id):[]);
+    const allInput=root.querySelector('[data-people="all"]');
+    allInput.indeterminate=count>0 && count<options.length;
+    allInput.addEventListener('change',()=>{
+      selectedPeople=new Set(count===options.length?[]:options.map(([id])=>id));
       refreshPeopleFilter();
-    }));
+    });
   });
 }
 
