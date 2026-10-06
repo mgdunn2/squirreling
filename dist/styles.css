@@ -117,7 +117,7 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 29px; line-height: 1; le
 .stats-grid strong { font-family: Georgia, serif; color: var(--lime); font-size: 27px; }
 .stats-grid span { margin-top: 3px; font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
 .full-list { padding-bottom: 15px; }
-.bottom-nav { position: fixed; z-index: 900; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 620px); height: calc(69px + env(safe-area-inset-bottom)); padding: 7px 12px env(safe-area-inset-bottom); background: rgba(255,253,247,.94); backdrop-filter: blur(15px); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4,1fr); }
+.bottom-nav { position: fixed; z-index: 900; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 620px); height: calc(69px + env(safe-area-inset-bottom)); padding: 7px 12px env(safe-area-inset-bottom); background: rgba(255,253,247,.94); backdrop-filter: blur(15px); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); }
 .nav-item { border: 0; background: none; color: #858b84; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 9px; font-weight: 800; cursor: pointer; }
 .nav-item span { font-size: 22px; line-height: 1; }
 .nav-item.active { color: var(--forest); }
@@ -216,3 +216,15 @@ dialog::backdrop { background: rgba(10,24,16,.55); backdrop-filter: blur(3px); }
 .people-menu span { overflow-wrap: anywhere; }
 
 .people-menu .people-all { border-bottom: 1px solid var(--line); margin-bottom: 4px; font-weight: 700; }
+.species-photo-button { border: 0; padding: 0; background: none; color: var(--forest); cursor: pointer; font-size: 12px; }
+.species-photo-button .taxon-photo { width: 48px; height: 48px; border-radius: 11px; display: block; }
+.species-photo-button span { display: block; margin-top: 3px; }
+.reset-species-photo { border: 0; padding: 5px 0; background: none; text-align: left; color: var(--forest); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.leaderboard-list { display: grid; gap: 10px; margin-top: 18px; }
+.leaderboard-row { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: white; }
+.leaderboard-row.is-me { border-color: var(--forest-2); background: #f2f6e7; }
+.leaderboard-row > strong { font-size: 16px; overflow-wrap: anywhere; }
+.leaderboard-rank { font-size: 20px; color: var(--muted); font-weight: 800; }
+.leaderboard-count { font-size: 26px; font-weight: 800; color: var(--forest); text-align: right; }
+.leaderboard-count small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+#leaderboardView > .helper { font-size: 14px; line-height: 1.5; }

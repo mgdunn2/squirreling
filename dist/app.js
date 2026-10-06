@@ -1,5 +1,5 @@
 const DB_NAME = 'squirreling-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const SETTINGS_KEY = 'squirreling-settings-v1';
 const PENDING_DELETES_KEY = 'squirreling-pending-deletes-v1';
 const TAXONOMY_VERSION = 2;
@@ -38,6 +38,8 @@ const legacySettingsSpecies = (() => {
 let settings = loadSettings();
 let sightings = [];
 let db;
+let speciesPhotos = {};
+let pendingSpeciesPhotoId = null;
 let map;
 let markerLayer;
 let mapScope = 'recent';
@@ -133,7 +135,8 @@ function migrateSighting(item, legacySpecies=[]) {
   const custom = { ...item, classificationId:'legacy:' + normalizeLabel(label).replace(/[^a-z0-9]+/g,'-'), taxonId:'sciuridae', taxonRank:'unclassified', commonName:label, scientificName:null, traits:[], identification:'broad', taxonomyVersion:TAXONOMY_VERSION, legacyLabel:label };
   return { item:custom, changed:true };
 }
-function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtml(taxon.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escapeHtml(FALLBACK_TAXON_IMAGE) + '\'">'; }
+function taxonPhotoSource(taxon) { return speciesPhotos[taxon.id] || taxon.image; }
+function taxonImage(taxon) { return '<img class="taxon-photo" src="' + escapeHtml(taxonPhotoSource(taxon)) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=\'' + escapeHtml(FALLBACK_TAXON_IMAGE) + '\'">'; }
 function scientificLine(taxon) { return taxon.scientific ? '<em>' + escapeHtml(taxon.scientific) + '</em>' : 'Broad identification'; }
 
 function filteredFeedSightings() {
@@ -153,7 +156,7 @@ function renderFeedFilters() {
   const options = [['me','Me'], ...friends.map(f => [f.uid, f.name || f.email || 'Friend'])];
   const count=options.filter(([id])=>selectedPeople.has(id)).length;
   const label=count===0?'Nobody':count===options.length&&count>1?'Everyone':count===1?options.find(([id])=>selectedPeople.has(id))[1]:`${count} people`;
-  ['mapFeedFilter','historyFeedFilter'].forEach(id => {
+  ['mapFeedFilter','historyFeedFilter','leaderboardFeedFilter'].forEach(id => {
     const root=$(id);
     const open=root.querySelector('details')?.open || false;
     root.innerHTML=`<details class="people-dropdown" ${open?'open':''}><summary>${escapeHtml(label)}</summary><div class="people-menu"><label class="people-all"><input type="checkbox" data-people="all" ${count===options.length?'checked':''}><span>All</span></label>${options.map(([value,name])=>`<label><input type="checkbox" value="${escapeHtml(value)}" ${selectedPeople.has(value)?'checked':''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></details>`;
@@ -182,10 +185,12 @@ function renderDataFilters() {
   const timeHtml=timeOptions.map(([value,label])=>`<option value="${value}" ${value===timeFilter?'selected':''}>${label}</option>`).join('');
   $('mapTimeFilter').innerHTML=timeHtml;
   $('historyTimeFilter').innerHTML=timeHtml;
+  $('leaderboardTimeFilter').innerHTML=timeHtml;
   const speciesOptions=[['all','All species'],...TAXA.map(taxon=>[taxon.id,taxon.name])];
   const speciesHtml=speciesOptions.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===speciesFilter?'selected':''}>${escapeHtml(label)}</option>`).join('');
   $('mapSpeciesFilter').innerHTML=speciesHtml;
   $('historySpeciesFilter').innerHTML=speciesHtml;
+  $('leaderboardSpeciesFilter').innerHTML=speciesHtml;
   $('historyGroupFilter').value=historyGroup;
 }
 
@@ -205,6 +210,7 @@ function openDb() {
     req.onupgradeneeded = () => {
       const database = req.result;
       if (!database.objectStoreNames.contains('sightings')) database.createObjectStore('sightings', { keyPath: 'id' });
+      if (!database.objectStoreNames.contains('speciesPhotos')) database.createObjectStore('speciesPhotos', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -220,6 +226,33 @@ function dbRequest(mode, action) {
   });
 }
 async function readAll() { return dbRequest('readonly', store => store.getAll()); }
+function speciesPhotoRequest(mode, action) {
+  return new Promise((resolve,reject) => {
+    const tx=db.transaction('speciesPhotos',mode);
+    const request=action(tx.objectStore('speciesPhotos'));
+    tx.oncomplete=()=>resolve(request.result);
+    tx.onerror=()=>reject(tx.error);
+    tx.onabort=()=>reject(tx.error);
+  });
+}
+async function saveSpeciesPhoto(id,photo) {
+  if (photo) await speciesPhotoRequest('readwrite',store=>store.put({id,photo}));
+  else await speciesPhotoRequest('readwrite',store=>store.delete(id));
+  if (photo) speciesPhotos[id]=photo; else delete speciesPhotos[id];
+}
+async function handleSpeciesPhoto(event) {
+  const file=event.target.files?.[0];
+  const id=pendingSpeciesPhotoId;
+  event.target.value='';
+  if (!file || !id) return;
+  showToast('Preparing species photo…');
+  try {
+    const photo=await compressImage(file,640);
+    await saveSpeciesPhoto(id,photo);
+    renderSpeciesEditor(); renderAll();
+    showToast('Species photo saved on this device');
+  } catch { showToast('Couldn’t save that photo. Try another image or free some device storage.'); }
+}
 async function putSighting(item, sync=true) {
   await dbRequest('readwrite', store => store.put(item));
   if (sync && currentUser && item.ownerUid === currentUser.uid) syncSighting(item).catch(() => renderAccount('Sync waiting for connection'));
@@ -237,6 +270,7 @@ async function removeSighting(id, sync=true) {
 
 async function init() {
   db = await openDb();
+  speciesPhotos=Object.fromEntries((await speciesPhotoRequest('readonly',store=>store.getAll())).map(item=>[item.id,item.photo]));
   const stored = await readAll();
   sightings = [];
   for (const original of stored) {
@@ -264,6 +298,9 @@ async function init() {
 }
 
 function bindEvents() {
+  $('speciesPhotoInput').addEventListener('change',handleSpeciesPhoto);
+  $('leaderboardTimeFilter').addEventListener('change',e=>setDataFilter('time',e.target.value));
+  $('leaderboardSpeciesFilter').addEventListener('change',e=>setDataFilter('species',e.target.value));
   document.querySelectorAll('.nav-item').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
   $('primarySpotButton').addEventListener('click', () => recordSighting(settings.primaryId));
   $('cameraButton').addEventListener('click', () => $('cameraInput').click());
@@ -317,6 +354,7 @@ function switchView(viewId) {
   }
   if (viewId === 'calendarView') renderCalendar();
   if (viewId === 'historyView') renderHistory();
+  if (viewId === 'leaderboardView') renderLeaderboard();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -628,12 +666,11 @@ async function handlePhoto(event) {
   event.target.value = '';
 }
 
-function compressImage(file) {
+function compressImage(file, max = 1600) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const max = 1600;
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
@@ -642,7 +679,7 @@ function compressImage(file) {
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/jpeg', .78));
     };
-    img.onerror = reject;
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unsupported image')); };
     img.src = url;
   });
 }
@@ -667,7 +704,7 @@ function renderHome() {
     $('primaryImage').onerror = null;
     $('primaryImage').src = FALLBACK_TAXON_IMAGE;
   };
-  $('primaryImage').src = primary.image;
+  $('primaryImage').src = taxonPhotoSource(primary);
   $('primaryImage').alt = primary.name;
   $('primaryName').textContent = primary.name;
   const quick = settings.visibleIds.filter(id => id !== settings.primaryId).map(classificationFor);
@@ -711,11 +748,26 @@ function changeMonth(delta) {
 }
 
 function renderHistory() {
+  renderLeaderboard();
   const visible = filteredSightings();
   $('totalCount').textContent = visible.length;
   $('speciesCount').textContent = new Set(visible.map(s=>s.taxonId || s.speciesId)).size;
   $('streakCount').textContent = calculateStreak(visible);
   renderGroupedHistory(visible);
+}
+
+function leaderboardEntries(items,people) {
+  const counts=new Map(people.map(([id,name])=>[id,{id,name,count:0}]));
+  items.forEach(item=>{ const entry=counts.get(item.friendUid || 'me'); if(entry) entry.count++; });
+  const rows=[...counts.values()].sort((a,b)=>b.count-a.count || (a.id==='me'?-1:b.id==='me'?1:a.name.localeCompare(b.name)));
+  let rank=0;
+  return rows.map((row,index)=>{ if(index===0 || row.count!==rows[index-1].count) rank=index+1; return {...row,rank}; });
+}
+function renderLeaderboard() {
+  const people=[['me','Me'],...friends.map(f=>[f.uid,f.name || f.email || 'Friend'])].filter(([id])=>selectedPeople.has(id));
+  const rows=leaderboardEntries(filteredSightings(),people);
+  $('leaderboardRows').innerHTML=rows.length ? rows.map(row=>`<div class="leaderboard-row ${row.id==='me'?'is-me':''}"><span class="leaderboard-rank">${row.rank}</span><strong>${escapeHtml(row.name)}</strong><span class="leaderboard-count">${row.count.toLocaleString()}<small>sighting${row.count===1?'':'s'}</small></span></div>`).join('') : '<div class="empty-state">Select people to see the standings.</div>';
+  $('leaderboardStatus').textContent=currentUser ? 'Only your sightings and those shared by approved friends are counted. Choose All in People to compare everyone.' : 'Local mode shows your sightings. Sign in and add friends to compare counts.';
 }
 
 function historyGroupKey(item) {
@@ -866,8 +918,17 @@ function openSettings() {
 }
 
 function renderSpeciesEditor() {
-  $('speciesEditor').innerHTML = TAXA.map(s => `<div class="species-edit-row ${s.id===settings.primaryId?'primary':''}" data-id="${escapeHtml(s.id)}">${taxonImage(s)}<span class="taxon-copy"><strong>${escapeHtml(s.name)}</strong><small>${scientificLine(s)}</small></span><label class="default-choice"><input type="radio" name="primary" value="${escapeHtml(s.id)}" ${s.id===settings.primaryId?'checked':''}><span>Default</span></label><button type="button" class="visibility-button" aria-label="${settings.visibleIds.includes(s.id)?'Remove from':'Add to'} shortcuts">${settings.visibleIds.includes(s.id)?'Shown':'Add'}</button></div>`).join('');
+  $('speciesEditor').innerHTML = TAXA.map(s => `<div class="species-edit-row ${s.id===settings.primaryId?'primary':''}" data-id="${escapeHtml(s.id)}"><button type="button" class="species-photo-button" aria-label="Choose a local photo for ${escapeHtml(s.name)}">${taxonImage(s)}<span>Photo</span></button><span class="taxon-copy"><strong>${escapeHtml(s.name)}</strong><small>${scientificLine(s)}</small>${speciesPhotos[s.id]?'<button type="button" class="reset-species-photo">Restore stock photo</button>':''}</span><label class="default-choice"><input type="radio" name="primary" value="${escapeHtml(s.id)}" ${s.id===settings.primaryId?'checked':''}><span>Default</span></label><button type="button" class="visibility-button" aria-label="${settings.visibleIds.includes(s.id)?'Remove from':'Add to'} shortcuts">${settings.visibleIds.includes(s.id)?'Shown':'Add'}</button></div>`).join('');
   $('speciesEditor').querySelectorAll('.species-edit-row').forEach(row => {
+    row.querySelector('.species-photo-button').onclick=()=>{
+      pendingSpeciesPhotoId=row.dataset.id;
+      $('speciesPhotoInput').click();
+    };
+    const reset=row.querySelector('.reset-species-photo');
+    if(reset) reset.onclick=async()=>{
+      try { await saveSpeciesPhoto(row.dataset.id,null); renderSpeciesEditor(); renderAll(); showToast('Stock photo restored'); }
+      catch { showToast('Couldn’t restore that photo'); }
+    };
     row.querySelector('[type=radio]').onchange = () => {
       settings.primaryId=row.dataset.id;
       settings.visibleIds=settings.visibleIds.filter(id=>id!==row.dataset.id);
@@ -942,7 +1003,7 @@ function commitSettings() {
 }
 
 async function exportData() {
-  const payload = { app:'Squirreling', version:2, taxonomyVersion:TAXONOMY_VERSION, exportedAt:new Date().toISOString(), settings, sightings };
+  const payload = { app:'Squirreling', version:3, taxonomyVersion:TAXONOMY_VERSION, exportedAt:new Date().toISOString(), settings, sightings, speciesPhotos };
   const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`squirreling-backup-${dateKey(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href);
   showToast('Backup exported');
@@ -957,6 +1018,9 @@ async function importData(event) {
     if (!confirm(`Import ${data.sightings.length} sightings ${intoAccount?'into your account':'on this device only'}? Existing sightings with different IDs will be kept.`)) return;
     const importLegacySpecies=Array.isArray(data.settings.species)?data.settings.species:[];
     settings=migrateSettings(data.settings); saveSettings();
+    for(const [id,photo] of Object.entries(data.speciesPhotos || {})) {
+      if(TAXON_BY_ID.has(id) && typeof photo==='string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo) && photo.length<5000000) await saveSpeciesPhoto(id,photo);
+    }
     for (const original of data.sightings) {
       const migrated=migrateSighting(original,importLegacySpecies);
       const item = { ...migrated.item, ownerUid:intoAccount?currentUser.uid:null, updatedAt:Date.now() };

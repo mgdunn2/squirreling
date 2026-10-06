@@ -111,6 +111,17 @@
         </div>
         <div class="sighting-list full-list" id="allSightings"></div>
       </section>
+      <section class="view" id="leaderboardView" aria-labelledby="leaderboardTab">
+        <div class="view-title"><p class="eyebrow">THE SQUIRREL STANDINGS</p><h2>Leaderboard</h2></div>
+        <div class="feed-filter-label">People<div id="leaderboardFeedFilter"></div></div>
+        <div class="filter-grid two-filters">
+          <label>Time<select id="leaderboardTimeFilter"></select></label>
+          <label>Species<select id="leaderboardSpeciesFilter"></select></label>
+        </div>
+        <p class="helper">Recorded sightings, not unique animals. Filters are shared with Map and Log.</p>
+        <div id="leaderboardRows" class="leaderboard-list" aria-live="polite"></div>
+        <p class="helper" id="leaderboardStatus"></p>
+      </section>
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -118,6 +129,7 @@
       <button class="nav-item" id="calendarTab" data-view="calendarView"><span>▦</span>Calendar</button>
       <button class="nav-item" id="mapTab" data-view="mapView"><span>⌖</span>Map</button>
       <button class="nav-item" id="historyTab" data-view="historyView"><span>☰</span>Log</button>
+      <button class="nav-item" id="leaderboardTab" data-view="leaderboardView"><span>♜</span>Ranks</button>
     </nav>
   </div>
 
@@ -127,6 +139,8 @@
     <form method="dialog" class="dialog-card">
       <div class="dialog-header"><div><p class="eyebrow">MAKE IT YOURS</p><h2>Squirrel setup</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
       <p class="dialog-intro">Choose the main spotting button and the smaller taxonomic shortcuts shown at home.</p>
+      <p class="helper">Tap a species photo to use your own. Custom photos stay on this device and are included in exported backups, not cloud sync.</p>
+      <input type="file" id="speciesPhotoInput" accept="image/*" hidden>
       <div class="species-editor" id="speciesEditor"></div>
       <div class="settings-section">
         <h3>Identification review</h3>
