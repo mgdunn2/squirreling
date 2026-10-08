@@ -10,7 +10,11 @@ const TAXA = [
   { id:'eastern-gray-melanistic', taxonId:'sciurus-carolinensis', name:'Black eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', traits:['melanistic'], image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg/960px-Melanistic_Eastern_Gray_Squirrel_%28Sciurus_carolinensis%29_01.jpg' },
   { id:'fox-squirrel', taxonId:'sciurus-niger', name:'Fox squirrel', scientific:'Sciurus niger', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg/960px-Fox_Squirrel_%28Sciurus_niger%29_%2816756760102%29.jpg' },
   { id:'american-red', taxonId:'tamiasciurus-hudsonicus', name:'American red squirrel', scientific:'Tamiasciurus hudsonicus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Tamiasciurus_hudsonicus.jpg/960px-Tamiasciurus_hudsonicus.jpg' },
+  { id:'aberts-squirrel', taxonId:'sciurus-aberti', name:'Abert’s squirrel', scientific:'Sciurus aberti', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Sciurus_aberti_Lassen_National_Forest.jpg/960px-Sciurus_aberti_Lassen_National_Forest.jpg' },
+  { id:'rock-squirrel', taxonId:'otospermophilus-variegatus', name:'Rock squirrel', scientific:'Otospermophilus variegatus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Otospermophilus_variegatus.jpg/960px-Otospermophilus_variegatus.jpg' },
+  { id:'harriss-antelope-squirrel', taxonId:'ammospermophilus-harrisii', name:'Harris’s antelope squirrel', scientific:'Ammospermophilus harrisii', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/Ammospermophilus_Harrisii.jpg/960px-Ammospermophilus_Harrisii.jpg' },
   { id:'townsends-chipmunk', taxonId:'neotamias-townsendii', name:'Townsend’s chipmunk', scientific:'Neotamias townsendii', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Neotamias_townsendii.jpg/960px-Neotamias_townsendii.jpg' },
+  { id:'cliff-chipmunk', taxonId:'neotamias-dorsalis', name:'Cliff chipmunk', scientific:'Neotamias dorsalis', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Cliff_chipmunk.jpg/330px-Cliff_chipmunk.jpg' },
   { id:'eastern-chipmunk', taxonId:'tamias-striatus', name:'Eastern chipmunk', scientific:'Tamias striatus', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
   { id:'chipmunk-unspecified', taxonId:'chipmunks', name:'Chipmunk — species unknown', scientific:null, rank:'group', identification:'broad', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Eastern_Chipmunk_%28Tamias_striatus%29.jpg/960px-Eastern_Chipmunk_%28Tamias_striatus%29.jpg' },
   { id:'groundhog', taxonId:'marmota-monax', name:'Groundhog', scientific:'Marmota monax', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg/960px-Groundhog_-_Marmota_monax%2C_Leesylvania_State_Park%2C_Woodbridge%2C_Virginia_cropped.jpg' },
@@ -71,6 +75,8 @@ let socialSession = 0;
 let friendsLoaded = false;
 let selectedPeople = new Set(['me']);
 let timeFilter = 'all';
+let customDateStart = '';
+let customDateEnd = '';
 let speciesFilter = 'all';
 let historyGroup = 'none';
 
@@ -149,12 +155,29 @@ function filteredFeedSightings() {
 }
 
 function filteredSightings() {
-  const now=Date.now();
-  const cutoffs={ week:now-(7*86400000), month:now-(30*86400000), year:new Date(new Date().getFullYear(),0,1).getTime() };
+  const bounds=timeFilterBounds();
   return filteredFeedSightings().filter(item => {
-    if (timeFilter !== 'all' && Number(item.timestamp) < cutoffs[timeFilter]) return false;
+    const timestamp=Number(item.timestamp);
+    if (bounds.start !== null && timestamp < bounds.start) return false;
+    if (bounds.end !== null && timestamp >= bounds.end) return false;
     return speciesFilter === 'all' || (item.classificationId || item.speciesId) === speciesFilter;
   });
+}
+
+function dateBoundary(value, exclusiveEnd=false) {
+  const parts=String(value || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return null;
+  return new Date(parts[0],parts[1]-1,parts[2]+(exclusiveEnd?1:0)).getTime();
+}
+
+function timeFilterBounds(now=new Date()) {
+  const todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  if (timeFilter === 'today') return { start:todayStart, end:new Date(now.getFullYear(),now.getMonth(),now.getDate()+1).getTime() };
+  if (timeFilter === 'week') return { start:now.getTime()-(7*86400000), end:null };
+  if (timeFilter === 'month') return { start:now.getTime()-(30*86400000), end:null };
+  if (timeFilter === 'year') return { start:new Date(now.getFullYear(),0,1).getTime(), end:null };
+  if (timeFilter === 'custom') return { start:dateBoundary(customDateStart), end:dateBoundary(customDateEnd,true) };
+  return { start:null, end:null };
 }
 
 function renderFeedFilters() {
@@ -186,7 +209,7 @@ function refreshPeopleFilter() {
 }
 
 function renderDataFilters() {
-  const timeOptions=[['all','All time'],['week','Last 7 days'],['month','Last 30 days'],['year','This year']];
+  const timeOptions=[['all','All time'],['today','Today'],['week','Last 7 days'],['month','Last 30 days'],['year','This year'],['custom','Custom range']];
   const timeHtml=timeOptions.map(([value,label])=>`<option value="${value}" ${value===timeFilter?'selected':''}>${label}</option>`).join('');
   $('mapTimeFilter').innerHTML=timeHtml;
   $('historyTimeFilter').innerHTML=timeHtml;
@@ -197,11 +220,37 @@ function renderDataFilters() {
   $('historySpeciesFilter').innerHTML=speciesHtml;
   $('leaderboardSpeciesFilter').innerHTML=speciesHtml;
   $('historyGroupFilter').value=historyGroup;
+  ['map','history','leaderboard'].forEach(prefix => {
+    const range=$(prefix + 'CustomDateRange');
+    range.classList.toggle('hidden',timeFilter !== 'custom');
+    $(prefix + 'CustomStart').value=customDateStart;
+    $(prefix + 'CustomEnd').value=customDateEnd;
+  });
 }
 
 function setDataFilter(type,value) {
-  if (type === 'time') timeFilter=value;
+  if (type === 'time') {
+    timeFilter=value;
+    if (value === 'custom' && !customDateStart && !customDateEnd) {
+      customDateStart=dateKey(new Date());
+      customDateEnd=customDateStart;
+    }
+  }
   if (type === 'species') speciesFilter=value;
+  mapScope='recent';
+  renderDataFilters();
+  renderHistory();
+  if ($('mapView').classList.contains('active')) renderMap();
+}
+
+function setCustomDateFilter(bound,value) {
+  if (bound === 'start') customDateStart=value;
+  if (bound === 'end') customDateEnd=value;
+  if (customDateStart && customDateEnd && customDateStart > customDateEnd) {
+    if (bound === 'start') customDateEnd=customDateStart;
+    else customDateStart=customDateEnd;
+  }
+  timeFilter='custom';
   mapScope='recent';
   renderDataFilters();
   renderHistory();
@@ -306,6 +355,10 @@ function bindEvents() {
   $('speciesPhotoInput').addEventListener('change',handleSpeciesPhoto);
   $('leaderboardTimeFilter').addEventListener('change',e=>setDataFilter('time',e.target.value));
   $('leaderboardSpeciesFilter').addEventListener('change',e=>setDataFilter('species',e.target.value));
+  ['map','history','leaderboard'].forEach(prefix => {
+    $(prefix + 'CustomStart').addEventListener('change',e=>setCustomDateFilter('start',e.target.value));
+    $(prefix + 'CustomEnd').addEventListener('change',e=>setCustomDateFilter('end',e.target.value));
+  });
   document.querySelectorAll('.nav-item').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
   $('primarySpotButton').addEventListener('click', () => recordSighting(settings.primaryId));
   $('cameraButton').addEventListener('click', () => $('cameraInput').click());

@@ -88,6 +88,10 @@
           <label>Time<select id="mapTimeFilter"></select></label>
           <label>Species<select id="mapSpeciesFilter"></select></label>
         </div>
+        <div class="custom-date-range hidden" id="mapCustomDateRange">
+          <label>From<input type="date" id="mapCustomStart"></label>
+          <label>Through<input type="date" id="mapCustomEnd"></label>
+        </div>
         <div class="map-legend" id="mapLegend" aria-label="Map pin colors"></div>
         <div class="map-card">
           <div id="map" aria-label="Map of squirrel sightings"></div>
@@ -104,6 +108,10 @@
           <label>Species<select id="historySpeciesFilter"></select></label>
           <label>Group<select id="historyGroupFilter"><option value="none">None</option><option value="day">Day</option><option value="species">Species</option><option value="person">Person</option></select></label>
         </div>
+        <div class="custom-date-range hidden" id="historyCustomDateRange">
+          <label>From<input type="date" id="historyCustomStart"></label>
+          <label>Through<input type="date" id="historyCustomEnd"></label>
+        </div>
         <div class="stats-grid">
           <div><strong id="totalCount">0</strong><span>Total</span></div>
           <div><strong id="speciesCount">0</strong><span>Types</span></div>
@@ -117,6 +125,10 @@
         <div class="filter-grid two-filters">
           <label>Time<select id="leaderboardTimeFilter"></select></label>
           <label>Species<select id="leaderboardSpeciesFilter"></select></label>
+        </div>
+        <div class="custom-date-range hidden" id="leaderboardCustomDateRange">
+          <label>From<input type="date" id="leaderboardCustomStart"></label>
+          <label>Through<input type="date" id="leaderboardCustomEnd"></label>
         </div>
         <p class="helper">Recorded sightings, not unique animals. Filters are shared with Map and Log.</p>
         <div id="leaderboardRows" class="leaderboard-list" aria-live="polite"></div>
@@ -180,7 +192,7 @@
       </div>
       <div class="settings-section">
         <h3>Wildlife photos</h3>
-        <small class="helper photo-credits">Photos via Wikimedia Commons: <a href="https://commons.wikimedia.org/wiki/File:Eastern_Grey_Squirrel.jpg" target="_blank" rel="noopener">Tom Friedel/BirdPhotos.com</a> (CC BY 3.0), <a href="https://commons.wikimedia.org/wiki/User:Ryan_Hodnett" target="_blank" rel="noopener">Ryan Hodnett</a> (CC BY-SA 4.0), <a href="https://commons.wikimedia.org/wiki/File:Fox_Squirrel_(Sciurus_niger)_(16756760102).jpg" target="_blank" rel="noopener">Andrew C</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Southern_Flying_Squirrel_-_Glaucomys_volans,_Arlington,_Virginia,_December_22,_2020_(53406816432).jpg" target="_blank" rel="noopener">Judy Gallagher</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Neotamias_townsendii.jpg" target="_blank" rel="noopener">Ludovic Hirlimann</a> (CC BY-SA 2.0), <a href="https://commons.wikimedia.org/wiki/File:Hoary_marmot_(Marmota_caligata_cascadensis)_Whistler_2.jpg" target="_blank" rel="noopener">Charles J. Sharp</a> (CC BY-SA 4.0), National Park Service (public domain), and the <a href="https://commons.wikimedia.org/wiki/File:Groundhog_-_Marmota_monax,_Leesylvania_State_Park,_Woodbridge,_Virginia_cropped.jpg" target="_blank" rel="noopener">Leesylvania groundhog image</a> (CC BY-SA 4.0). Photos are cropped in the interface. <a href="https://creativecommons.org/licenses/" target="_blank" rel="noopener">License details</a>.</small>
+        <small class="helper photo-credits">Photos via Wikimedia Commons: <a href="https://commons.wikimedia.org/wiki/File:Eastern_Grey_Squirrel.jpg" target="_blank" rel="noopener">Tom Friedel/BirdPhotos.com</a> (CC BY 3.0), <a href="https://commons.wikimedia.org/wiki/User:Ryan_Hodnett" target="_blank" rel="noopener">Ryan Hodnett</a> (CC BY-SA 4.0), <a href="https://commons.wikimedia.org/wiki/File:Fox_Squirrel_(Sciurus_niger)_(16756760102).jpg" target="_blank" rel="noopener">Andrew C</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Sciurus_aberti_Lassen_National_Forest.jpg" target="_blank" rel="noopener">M. Burton/USFS</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Otospermophilus_variegatus.jpg" target="_blank" rel="noopener">peterwchen</a> (CC BY 4.0), <a href="https://commons.wikimedia.org/wiki/File:Ammospermophilus_Harrisii.jpg" target="_blank" rel="noopener">Johan Fredriksson</a> (CC BY-SA 3.0), <a href="https://commons.wikimedia.org/wiki/File:Southern_Flying_Squirrel_-_Glaucomys_volans,_Arlington,_Virginia,_December_22,_2020_(53406816432).jpg" target="_blank" rel="noopener">Judy Gallagher</a> (CC BY 2.0), <a href="https://commons.wikimedia.org/wiki/File:Neotamias_townsendii.jpg" target="_blank" rel="noopener">Ludovic Hirlimann</a> (CC BY-SA 2.0), <a href="https://commons.wikimedia.org/wiki/File:Hoary_marmot_(Marmota_caligata_cascadensis)_Whistler_2.jpg" target="_blank" rel="noopener">Charles J. Sharp</a> (CC BY-SA 4.0), National Park Service (public domain), and the <a href="https://commons.wikimedia.org/wiki/File:Groundhog_-_Marmota_monax,_Leesylvania_State_Park,_Woodbridge,_Virginia_cropped.jpg" target="_blank" rel="noopener">Leesylvania groundhog image</a> (CC BY-SA 4.0). Photos are cropped in the interface. <a href="https://creativecommons.org/licenses/" target="_blank" rel="noopener">License details</a>.</small>
       </div>
       <button class="save-button" value="default" id="saveSettingsButton">Save changes</button>
     </form>

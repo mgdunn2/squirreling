@@ -1,4 +1,4 @@
-const CACHE = 'squirreling-shell-v17';
+const CACHE = 'squirreling-shell-v18';
 const IMAGE_CACHE = 'squirreling-taxa-v2';
 const SDK_CACHE = 'squirreling-firebase-v1';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './firebase-config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
