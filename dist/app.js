@@ -1227,17 +1227,40 @@ async function initFirebase() {
 }
 
 async function signInWithGoogle() {
-  if (!firebaseAuth) { showToast('Cloud sync is unavailable'); return; }
-  const provider = new firebase.auth.GoogleAuthProvider();
+  const button=$('googleSignInButton');
+  const originalLabel=button.textContent;
+  button.disabled=true;
+  button.textContent='Connecting…';
+  showToast('Connecting to Google…');
   try {
+    if (!firebaseAuth) {
+      await loadFirebaseLibraries();
+      await initFirebase();
+    }
+    if (!firebaseAuth) throw Object.assign(new Error('Firebase unavailable'),{ code:'auth/network-request-failed' });
+    const provider = new firebase.auth.GoogleAuthProvider();
     await firebaseAuth.signInWithPopup(provider);
   } catch (error) {
     if (['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(error.code)) {
-      await firebaseAuth.signInWithRedirect(provider);
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await firebaseAuth.signInWithRedirect(provider);
+      } catch (redirectError) {
+        showGoogleSignInError(redirectError);
+      }
     } else {
-      showToast(error.code === 'auth/unauthorized-domain' ? 'Add mgdunn2.github.io to Firebase authorized domains' : 'Google sign-in did not complete');
+      showGoogleSignInError(error);
     }
+  } finally {
+    button.disabled=false;
+    button.textContent=originalLabel;
   }
+}
+
+function showGoogleSignInError(error) {
+  if (error?.code === 'auth/unauthorized-domain') showToast('Add mgdunn2.github.io to Firebase authorized domains');
+  else if (error?.code === 'auth/network-request-failed' || !navigator.onLine) showToast('Sign-in needs a working connection');
+  else showToast('Google sign-in did not complete');
 }
 
 function renderAccount(message='') {

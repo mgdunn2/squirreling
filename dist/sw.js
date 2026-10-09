@@ -1,4 +1,4 @@
-const CACHE = 'squirreling-shell-v19';
+const CACHE = 'squirreling-shell-v20';
 const IMAGE_CACHE = 'squirreling-taxa-v2';
 const SDK_CACHE = 'squirreling-firebase-v1';
 const LIBRARY_CACHE = 'squirreling-libraries-v1';
