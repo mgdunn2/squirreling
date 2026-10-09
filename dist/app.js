@@ -4,6 +4,14 @@ const SETTINGS_KEY = 'squirreling-settings-v1';
 const PENDING_DELETES_KEY = 'squirreling-pending-deletes-v1';
 const FRIENDS_CACHE_KEY = 'squirreling-friends-cache-v1';
 const TAXONOMY_VERSION = 2;
+const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+const LEAFLET_SCRIPT_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+const FIREBASE_SCRIPT_URLS = [
+  'https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js'
+];
+const OPTIONAL_LOAD_TIMEOUT = 6500;
 
 const TAXA = [
   { id:'eastern-gray', taxonId:'sciurus-carolinensis', name:'Eastern gray squirrel', scientific:'Sciurus carolinensis', rank:'species', identification:'exact', image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Eastern_Grey_Squirrel.jpg/960px-Eastern_Grey_Squirrel.jpg' },
@@ -60,6 +68,8 @@ let locationPickerSelection = null;
 let locationPickerTarget = null;
 let firebaseAuth = null;
 let cloudDb = null;
+let firebaseLoadPromise = null;
+let leafletLoadPromise = null;
 let currentUser = null;
 let unsubscribeCloud = null;
 let importTarget = 'local';
@@ -339,16 +349,91 @@ async function init() {
   saveSettings();
   bindEvents();
   renderAll();
-  initFirebase();
-  if ('serviceWorker' in navigator) {
-    let refreshing=false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return;
-      refreshing=true;
-      location.reload();
+  registerServiceWorker();
+  loadOptionalLibraries();
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  let refreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing=true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(registration => registration.update()).catch(() => {});
+}
+
+function loadScript(url, timeout=OPTIONAL_LOAD_TIMEOUT) {
+  const existing=[...document.scripts].find(script => script.src === url);
+  if (existing?.dataset.loaded === 'true') return Promise.resolve();
+  return new Promise((resolve,reject) => {
+    const script=existing || document.createElement('script');
+    let settled=false;
+    const finish=(error) => {
+      if (settled) return;
+      settled=true;
+      clearTimeout(timer);
+      script.onload=null;
+      script.onerror=null;
+      if (error) {
+        script.remove();
+        reject(error);
+      } else {
+        script.dataset.loaded='true';
+        resolve();
+      }
+    };
+    const timer=setTimeout(() => finish(new Error('Network library timed out')),timeout);
+    script.onload=()=>finish();
+    script.onerror=()=>finish(new Error('Network library failed'));
+    if (!existing) {
+      script.src=url;
+      script.async=true;
+      script.crossOrigin='anonymous';
+      document.head.appendChild(script);
+    }
+  });
+}
+
+function loadStylesheet(url) {
+  if ([...document.styleSheets].some(sheet => sheet.href === url)) return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href=url;
+  link.crossOrigin='anonymous';
+  document.head.appendChild(link);
+}
+
+async function loadLeaflet() {
+  if (window.L) return;
+  if (!leafletLoadPromise) {
+    loadStylesheet(LEAFLET_CSS_URL);
+    leafletLoadPromise=loadScript(LEAFLET_SCRIPT_URL).catch(error => {
+      leafletLoadPromise=null;
+      throw error;
     });
-    navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(registration => registration.update()).catch(() => {});
   }
+  await leafletLoadPromise;
+  if ($('mapView').classList.contains('active')) renderMap();
+}
+
+async function loadFirebaseLibraries() {
+  if (window.firebase?.auth && window.firebase?.firestore) return;
+  if (!firebaseLoadPromise) {
+    firebaseLoadPromise=(async()=>{
+      for (const url of FIREBASE_SCRIPT_URLS) await loadScript(url);
+    })().catch(error => {
+      firebaseLoadPromise=null;
+      throw error;
+    });
+  }
+  await firebaseLoadPromise;
+}
+
+function loadOptionalLibraries() {
+  loadLeaflet().catch(() => {});
+  loadFirebaseLibraries().then(initFirebase).catch(() => renderAccount('Cloud sync is waiting for a connection; local mode works.'));
 }
 
 function bindEvents() {
@@ -395,6 +480,8 @@ function bindEvents() {
   $('cancelNoteSighting').addEventListener('click', () => $('noteSightingDialog').close());
   window.addEventListener('online', () => {
     if (currentUser && socialRetryTimer) restartSocialSync(currentUser);
+    if (!window.L) loadLeaflet().catch(() => {});
+    if (!firebaseAuth) loadFirebaseLibraries().then(initFirebase).catch(() => {});
   });
   document.addEventListener('click', event => {
     document.querySelectorAll('.people-dropdown[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open=false; });
@@ -559,24 +646,28 @@ function openLocationPicker(target) {
   if ($('pastSightingDialog').open) $('pastSightingDialog').close();
   if ($('detailDialog').open) $('detailDialog').close();
   $('locationPickerDialog').showModal();
-  setTimeout(() => {
-    const mapped = sightings.find(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
-    const center = locationPickerSelection || (mapped ? { latitude:mapped.latitude, longitude:mapped.longitude } : { latitude:38.88, longitude:-77.1 });
-    if (!locationPickerMap) {
-      locationPickerMap = L.map('locationPickerMap').setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap contributors' }).addTo(locationPickerMap);
-      locationPickerMap.on('click', event => setPickerSelection(event.latlng.lat, event.latlng.lng));
-    } else {
-      locationPickerMap.setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
-    }
-    if (locationPickerSelection) setPickerSelection(locationPickerSelection.latitude, locationPickerSelection.longitude, false);
-    else {
-      if (locationPickerMarker) { locationPickerMap.removeLayer(locationPickerMarker); locationPickerMarker=null; }
-      $('pickedCoordinates').textContent = 'Tap the map to place a pin.';
-      $('savePickedLocation').disabled = true;
-    }
-    locationPickerMap.invalidateSize();
-  }, 80);
+  setTimeout(renderLocationPickerMap, 80);
+  if (!window.L) loadLeaflet().then(renderLocationPickerMap).catch(() => showToast('The map will load when your connection improves'));
+}
+
+function renderLocationPickerMap() {
+  if (!window.L || !$('locationPickerDialog').open) return;
+  const mapped = sightings.find(s => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  const center = locationPickerSelection || (mapped ? { latitude:mapped.latitude, longitude:mapped.longitude } : { latitude:38.88, longitude:-77.1 });
+  if (!locationPickerMap) {
+    locationPickerMap = L.map('locationPickerMap').setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap contributors' }).addTo(locationPickerMap);
+    locationPickerMap.on('click', event => setPickerSelection(event.latlng.lat, event.latlng.lng));
+  } else {
+    locationPickerMap.setView([center.latitude, center.longitude], locationPickerSelection ? 15 : 11);
+  }
+  if (locationPickerSelection) setPickerSelection(locationPickerSelection.latitude, locationPickerSelection.longitude, false);
+  else {
+    if (locationPickerMarker) { locationPickerMap.removeLayer(locationPickerMarker); locationPickerMarker=null; }
+    $('pickedCoordinates').textContent = 'Tap the map to place a pin.';
+    $('savePickedLocation').disabled = true;
+  }
+  locationPickerMap.invalidateSize();
 }
 
 function setPickerSelection(latitude, longitude, pan=true) {
@@ -953,8 +1044,13 @@ function renderMap() {
   $('mapScopeButton').textContent = mapScope === 'all' ? 'Show recent week' : 'Show all sightings';
   $('mapScopeButton').hidden = !hasOlderSightings;
   $('mapLegend').innerHTML = [...people.values()].map(person => `<span class="map-legend-item"><i class="map-legend-dot" style="--pin-color:${person.color}"></i>${escapeHtml(person.name)}</span>`).join('');
+  if (!window.L) {
+    $('mapEmpty').classList.remove('hidden');
+    $('mapEmpty').innerHTML='<span>⌁</span><strong>Map waiting for connection</strong><p>Spotting and local history still work normally.</p>';
+    return;
+  }
+  $('mapEmpty').innerHTML='<span>📍</span><strong>No mapped squirrels yet</strong><p>Your next GPS-tagged sighting will appear here.</p>';
   $('mapEmpty').classList.toggle('hidden', mapped.length > 0);
-  if (!window.L) return;
   if (!map) {
     map = L.map('map', { zoomControl: true }).setView([38.88,-77.1], 11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution:'© OpenStreetMap contributors' }).addTo(map);
@@ -1095,6 +1191,7 @@ async function importData(event) {
 }
 
 async function initFirebase() {
+  if (firebaseAuth) return;
   if (!window.firebase || !window.SQUIRRELING_FIREBASE_CONFIG) {
     renderAccount('Cloud sync is unavailable; local mode still works.');
     return;
